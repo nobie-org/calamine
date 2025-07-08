@@ -346,9 +346,12 @@ fn defined_names_xlsb() {
     assert_eq!(
         defined_names,
         vec![
-            ("MyBrokenRange".to_string(), "Sheet1!#REF!".to_string()),
-            ("MyDataTypes".to_string(), "datatypes!$A$1:$A$6".to_string()),
-            ("OneRange".to_string(), "Sheet1!$A$1".to_string()),
+            ("MyBrokenRange".to_string(), "'Sheet1'!#REF!".to_string()),
+            (
+                "MyDataTypes".to_string(),
+                "'datatypes'!$A$1:$A$6".to_string()
+            ),
+            ("OneRange".to_string(), "'Sheet1'!$A$1".to_string()),
         ]
     );
 }
@@ -2149,7 +2152,7 @@ fn test_sheet_ref_error_xlsb() {
 
     let formula_range = excel.worksheet_formula("Sheet1").unwrap();
 
-    range_eq!(formula_range, [["#InvalidWorkSheet!$USM$1".to_string()]]);
+    range_eq!(formula_range, [["'#InvalidWorkSheet'!A1".to_string()]]);
 }
 
 #[test]
@@ -2171,4 +2174,13 @@ fn test_escape_quote_xlsb() {
     let formulas = excel.worksheet_formula("Sheet1").unwrap();
 
     range_eq!(formulas, [["\"ab\"\"cd\""],]);
+}
+
+#[test]
+fn test_sheet_ref_quote_xlsb() {
+    let mut excel: Xlsb<_> = wb("sheet_ref_quote.xlsb");
+
+    let formula_range = excel.worksheet_formula("Sheet1").unwrap();
+
+    range_eq!(formula_range, [["'1'!A1"], ["'G&A'!A1"], ["'a''b'!A1"]]);
 }
