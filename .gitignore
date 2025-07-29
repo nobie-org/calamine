@@ -1,4 +1,6 @@
 target
+.history
+target-*
 Cargo.lock
 *.bk
 .vim
