@@ -1,5 +1,6 @@
 mod cells_reader;
 pub mod column_width;
+mod pivot;
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -25,6 +26,7 @@ use crate::formats::{
     builtin_format_by_id, detect_custom_number_format_with_interner, Alignment, Border, BorderSide,
     CellFormat, CellStyle, Color, Fill, Font, FormatStringInterner,
 };
+use crate::pivot::PivotTableCollection;
 use crate::vba::VbaProject;
 use crate::{
     Cell, CellErrorType, Data, DataWithFormatting, Dimensions, HeaderRow, Metadata, Range, Reader,
@@ -231,6 +233,8 @@ pub struct Xlsx<RS> {
     dxf_formats: Vec<DifferentialFormat>,
     /// Conditional formatting rules by sheet name
     conditional_formats: BTreeMap<String, Vec<ConditionalFormatting>>,
+    /// Pivot tables collection
+    pivot_tables: PivotTableCollection,
 }
 
 /// Xlsx reader options
@@ -2600,6 +2604,7 @@ impl<RS: Read + Seek> Reader<RS> for Xlsx<RS> {
             options: XlsxOptions::default(),
             dxf_formats: Vec::new(),
             conditional_formats: BTreeMap::new(),
+            pivot_tables: PivotTableCollection::new(),
         };
         xlsx.read_shared_strings()?;
         xlsx.read_styles()?;
@@ -2733,6 +2738,25 @@ impl<RS: Read + Seek> Reader<RS> for Xlsx<RS> {
     #[cfg(feature = "picture")]
     fn pictures(&self) -> Option<Vec<(String, Vec<u8>)>> {
         self.pictures.to_owned()
+    }
+
+    fn load_pivot_tables(&mut self) -> Result<(), XlsxError> {
+        self.load_pivot_tables()
+    }
+
+    fn pivot_table_names(&self) -> Vec<&str> {
+        self.pivot_table_names()
+    }
+
+    fn pivot_table_by_name(&mut self, name: &str) -> Result<crate::pivot::PivotTable, XlsxError> {
+        self.pivot_table_by_name(name)
+    }
+
+    fn pivot_cache_with_records(
+        &mut self,
+        cache_id: u32,
+    ) -> Result<crate::pivot::PivotCache, XlsxError> {
+        self.pivot_cache_with_records(cache_id)
     }
 }
 
@@ -3282,6 +3306,7 @@ mod tests {
             options: XlsxOptions::default(),
             dxf_formats: vec![],
             conditional_formats: BTreeMap::new(),
+            pivot_tables: PivotTableCollection::new(),
         };
 
         assert!(xlsx.read_shared_strings().is_ok());

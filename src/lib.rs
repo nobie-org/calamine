@@ -72,6 +72,7 @@ mod xlsx;
 
 mod de;
 mod errors;
+pub mod pivot;
 pub mod vba;
 
 use serde::de::{Deserialize, DeserializeOwned, Deserializer};
@@ -100,6 +101,11 @@ pub use crate::formats::{
     CellStyle, Color, Fill, Font, FormatStringInterner, PatternType,
 };
 pub use crate::ods::{Ods, OdsError};
+pub use crate::pivot::{
+    AggregationFunction, PivotCache, PivotCacheField, PivotDataField, PivotField,
+    PivotFieldDataType, PivotFieldType, PivotFilter, PivotFilterType, PivotSourceType, PivotTable,
+    PivotTableCollection, PivotTableInfo,
+};
 pub use crate::xls::{Xls, XlsError, XlsOptions};
 pub use crate::xlsb::{Xlsb, XlsbError};
 pub use crate::xlsx::{ColumnDefinition, ColumnWidths, SheetFormatProperties, Xlsx, XlsxError};
@@ -416,6 +422,41 @@ where
 
     /// Read worksheet formula in corresponding worksheet path
     fn worksheet_formula(&mut self, _: &str) -> Result<Range<DataWithFormatting>, Self::Error>;
+
+    /// Load pivot tables metadata (must be called before accessing pivot tables)
+    fn load_pivot_tables(&mut self) -> Result<(), Self::Error> {
+        // Default implementation returns Ok for formats that don't support pivot tables
+        Ok(())
+    }
+
+    /// Get all pivot table names
+    fn pivot_table_names(&self) -> Vec<&str> {
+        // Default implementation returns empty vec for formats that don't support pivot tables
+        Vec::new()
+    }
+
+    /// Get pivot table by name
+    fn pivot_table_by_name(&mut self, _name: &str) -> Result<pivot::PivotTable, Self::Error> {
+        // Default implementation returns error for formats that don't support pivot tables
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "Pivot tables not supported in this format",
+        )
+        .into())
+    }
+
+    /// Get pivot cache with records by cache ID
+    fn pivot_cache_with_records(
+        &mut self,
+        _cache_id: u32,
+    ) -> Result<pivot::PivotCache, Self::Error> {
+        // Default implementation returns error for formats that don't support pivot tables
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "Pivot caches not supported in this format",
+        )
+        .into())
+    }
 
     /// Get all sheet names of this workbook, in workbook order
     ///

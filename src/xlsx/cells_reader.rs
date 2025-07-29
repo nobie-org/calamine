@@ -80,7 +80,8 @@ where
                                 } => {
                                     if let Ok(width_str) = xml.decoder().decode(&v) {
                                         if let Ok(width) = width_str.parse::<f64>() {
-                                            column_widths.sheet_format.default_col_width = Some(width);
+                                            column_widths.sheet_format.default_col_width =
+                                                Some(width);
                                         }
                                     }
                                 }
@@ -100,7 +101,8 @@ where
                                 } => {
                                     if let Ok(height_str) = xml.decoder().decode(&v) {
                                         if let Ok(height) = height_str.parse::<f64>() {
-                                            column_widths.sheet_format.default_row_height = Some(height);
+                                            column_widths.sheet_format.default_row_height =
+                                                Some(height);
                                         }
                                     }
                                 }
@@ -166,7 +168,8 @@ where
                                                 key: QName(b"customWidth"),
                                                 value: v,
                                             } => {
-                                                def.custom_width = Some(&*v == b"1" || &*v == b"true");
+                                                def.custom_width =
+                                                    Some(&*v == b"1" || &*v == b"true");
                                             }
                                             Attribute {
                                                 key: QName(b"bestFit"),

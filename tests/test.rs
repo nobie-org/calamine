@@ -2846,7 +2846,7 @@ fn test_column_widths() {
 
     // Test that we got some column definitions
     // The actual parsing of widths is now tested in the column_width module tests
-    
+
     // The new API returns raw values from the file
     // Testing is done within the library's unit tests
 }
@@ -2901,11 +2901,11 @@ fn test_column_width_parsing() {
     let defs_col1 = test_widths.find_definitions_for_column(1);
     assert_eq!(defs_col1.len(), 1, "Should find 1 definition for column 1");
     assert_eq!(defs_col1[0].width.unwrap(), 15.0);
-    
+
     let defs_col4 = test_widths.find_definitions_for_column(4);
     assert_eq!(defs_col4.len(), 1, "Should find 1 definition for column 4");
     assert_eq!(defs_col4[0].width.unwrap(), 20.0);
-    
+
     // The new API returns raw values from the file
     // Testing is done within the library's unit tests
 }
