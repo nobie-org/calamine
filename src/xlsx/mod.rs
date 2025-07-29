@@ -1,4 +1,5 @@
 mod cells_reader;
+mod pivot;
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -24,6 +25,7 @@ use crate::formats::{
     builtin_format_by_id, detect_custom_number_format_with_interner, Alignment, Border, BorderSide,
     CellFormat, CellStyle, Color, Fill, Font, FormatStringInterner,
 };
+use crate::pivot::PivotTableCollection;
 use crate::vba::VbaProject;
 use crate::{
     Cell, CellErrorType, Data, DataWithFormatting, Dimensions, HeaderRow, Metadata, Range, Reader, ReaderRef, Sheet,
@@ -229,6 +231,8 @@ pub struct Xlsx<RS> {
     dxf_formats: Vec<DifferentialFormat>,
     /// Conditional formatting rules by sheet name
     conditional_formats: BTreeMap<String, Vec<ConditionalFormatting>>,
+    /// Pivot tables collection
+    pivot_tables: PivotTableCollection,
 }
 
 /// Xlsx reader options
@@ -2530,6 +2534,7 @@ impl<RS: Read + Seek> Reader<RS> for Xlsx<RS> {
             options: XlsxOptions::default(),
             dxf_formats: Vec::new(),
             conditional_formats: BTreeMap::new(),
+            pivot_tables: PivotTableCollection::new(),
         };
         xlsx.read_shared_strings()?;
         xlsx.read_styles()?;
@@ -3218,6 +3223,7 @@ mod tests {
             options: XlsxOptions::default(),
             dxf_formats: vec![],
             conditional_formats: BTreeMap::new(),
+            pivot_tables: PivotTableCollection::new(),
         };
 
         assert!(xlsx.read_shared_strings().is_ok());

@@ -73,6 +73,7 @@ mod xlsx;
 mod de;
 mod errors;
 pub mod vba;
+pub mod pivot;
 
 use serde::de::{Deserialize, DeserializeOwned, Deserializer};
 use std::borrow::Cow;
@@ -100,6 +101,11 @@ pub use crate::formats::{
     CellStyle, Color, Fill, Font, FormatStringInterner, PatternType,
 };
 pub use crate::ods::{Ods, OdsError};
+pub use crate::pivot::{
+    AggregationFunction, PivotCache, PivotCacheField, PivotDataField, PivotField,
+    PivotFieldDataType, PivotFieldType, PivotFilter, PivotFilterType, PivotSourceType,
+    PivotTable, PivotTableCollection, PivotTableInfo,
+};
 pub use crate::xls::{Xls, XlsError, XlsOptions};
 pub use crate::xlsb::{Xlsb, XlsbError};
 pub use crate::xlsx::{Xlsx, XlsxError};
@@ -417,7 +423,17 @@ where
     /// Read worksheet formula in corresponding worksheet path
     fn worksheet_formula(&mut self, _: &str) -> Result<Range<DataWithFormatting>, Self::Error>;
 
+    /// Load pivot tables metadata (must be called before accessing pivot tables)
+    fn load_pivot_tables(&mut self) -> Result<(), Self::Error> {
+        // Default implementation returns Ok for formats that don't support pivot tables
+        Ok(())
+    }
 
+    /// Get all pivot table names
+    fn pivot_table_names(&self) -> Vec<&str> {
+        // Default implementation returns empty vec for formats that don't support pivot tables
+        Vec::new()
+    }
 
     /// Get all sheet names of this workbook, in workbook order
     ///
