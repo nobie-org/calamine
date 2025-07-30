@@ -2675,6 +2675,22 @@ impl<RS: Read + Seek> Reader<RS> for Xlsx<RS> {
     fn pictures(&self) -> Option<Vec<(String, Vec<u8>)>> {
         self.pictures.to_owned()
     }
+
+    fn load_pivot_tables(&mut self) -> Result<(), XlsxError> {
+        self.load_pivot_tables()
+    }
+
+    fn pivot_table_names(&self) -> Vec<&str> {
+        self.pivot_table_names()
+    }
+
+    fn pivot_table_by_name(&mut self, name: &str) -> Result<crate::pivot::PivotTable, XlsxError> {
+        self.pivot_table_by_name(name)
+    }
+
+    fn pivot_cache_with_records(&mut self, cache_id: u32) -> Result<crate::pivot::PivotCache, XlsxError> {
+        self.pivot_cache_with_records(cache_id)
+    }
 }
 
 impl<RS: Read + Seek> ReaderRef<RS> for Xlsx<RS> {

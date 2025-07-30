@@ -435,6 +435,24 @@ where
         Vec::new()
     }
 
+    /// Get pivot table by name
+    fn pivot_table_by_name(&mut self, _name: &str) -> Result<pivot::PivotTable, Self::Error> {
+        // Default implementation returns error for formats that don't support pivot tables
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported, 
+            "Pivot tables not supported in this format"
+        ).into())
+    }
+
+    /// Get pivot cache with records by cache ID
+    fn pivot_cache_with_records(&mut self, _cache_id: u32) -> Result<pivot::PivotCache, Self::Error> {
+        // Default implementation returns error for formats that don't support pivot tables
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported, 
+            "Pivot caches not supported in this format"
+        ).into())
+    }
+
     /// Get all sheet names of this workbook, in workbook order
     ///
     /// # Examples

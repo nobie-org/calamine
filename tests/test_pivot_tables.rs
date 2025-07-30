@@ -43,6 +43,8 @@ fn test_get_pivot_table() {
     println!("Number of fields: {}", pivot.fields.len());
     println!("Fields: {:#?}", pivot.fields);
 
+    println!("Pivot table: {:#?}", pivot);
+
     assert_eq!(pivot.name, "SalesSummary");
     assert_eq!(pivot.sheet_name, "Reports");
     assert_eq!(pivot.source_range, Some("A1:D5".to_string()));
@@ -63,4 +65,55 @@ fn test_pivot_tables_on_regular_file() {
     // Should return empty list
     let pivot_names = workbook.pivot_table_names();
     assert_eq!(pivot_names.len(), 0);
+}
+
+#[test]
+fn test_pivot_cache_with_records() {
+    let path = format!("{}/tests/pivot_test.xlsx", env!("CARGO_MANIFEST_DIR"));
+    let mut workbook: Xlsx<_> = open_workbook(&path).expect("Cannot open file");
+
+    // Load pivot tables
+    workbook
+        .load_pivot_tables()
+        .expect("Failed to load pivot tables");
+
+    // Get a pivot table first to find its cache ID
+    let pivot = workbook
+        .pivot_table_by_name("SalesSummary")
+        .expect("Pivot table not found");
+    
+    let cache_id = pivot.cache_id;
+    println!("Getting cache for ID: {}", cache_id);
+
+    // Now get the cache with records
+    let cache = workbook
+        .pivot_cache_with_records(cache_id)
+        .expect("Failed to get pivot cache");
+
+    println!("Cache ID: {}", cache.id);
+    println!("Source type: {:?}", cache.source_type);
+    println!("Source range: {:?}", cache.source_range);
+    println!("Source sheet: {:?}", cache.source_sheet);
+    println!("Number of fields: {}", cache.fields.len());
+    
+    // Print field info including shared items
+    for (i, field) in cache.fields.iter().enumerate() {
+        println!("Field {}: {} - shared items: {:?}", i, field.name, field.shared_items);
+    }
+    
+    // Check if records were loaded
+    assert!(cache.records.is_some(), "Cache records should be loaded");
+    
+    if let Some(records) = &cache.records {
+        println!("Number of records: {}", records.len());
+        
+        // Print first few records
+        for (i, record) in records.iter().take(3).enumerate() {
+            println!("Record {}: {:?}", i, record);
+        }
+    }
+
+    // Verify cache metadata
+    assert_eq!(cache.source_range, Some("A1:D5".to_string()));
+    assert_eq!(cache.source_sheet, Some("Sales".to_string()));
 }

@@ -7,7 +7,7 @@ use crate::pivot::{
     PivotCache, PivotCacheField, PivotField, PivotFieldDataType, PivotFieldType, PivotSourceType,
     PivotTable, PivotTableInfo,
 };
-use crate::{Reader, XlsxError};
+use crate::{Data, Reader, XlsxError};
 
 use super::{get_attribute, get_dimension, xml_reader, XlReader};
 
@@ -45,6 +45,44 @@ impl<RS: Read + Seek> super::Xlsx<RS> {
 
         // Parse the full pivot table
         self.parse_pivot_table(&sheet_name, &info.path)
+    }
+
+    /// Get pivot cache by ID with its records
+    pub fn pivot_cache_with_records(&mut self, cache_id: u32) -> Result<PivotCache, XlsxError> {
+        // First get the cache metadata
+        let mut cache = self
+            .pivot_tables
+            .caches
+            .get(&cache_id)
+            .ok_or_else(|| XlsxError::Unexpected("Pivot cache not found"))?
+            .clone();
+
+        // If cache already has records, return it
+        if cache.records.is_some() {
+            return Ok(cache);
+        }
+
+        // Find and parse the pivot cache records file
+        // Use the cache path to determine the records file path
+        if let Some(cache_def_path) = &cache.cache_path {
+            // Extract the number from the cache definition path
+            if let Some(cache_num) = cache_def_path
+                .split("pivotCacheDefinition")
+                .nth(1)
+                .and_then(|s| s.trim_end_matches(".xml").parse::<u32>().ok())
+            {
+                let records_path = format!("xl/pivotCache/pivotCacheRecords{}.xml", cache_num);
+                if let Some(Ok(mut reader)) = xml_reader(&mut self.zip, &records_path) {
+                    let records = parse_pivot_cache_records(&mut reader, &cache.fields)?;
+                    cache.records = Some(records);
+                }
+            }
+        }
+
+        // Update the cache in the collection
+        self.pivot_tables.caches.insert(cache_id, cache.clone());
+
+        Ok(cache)
     }
 
     /// Read pivot table metadata
@@ -107,7 +145,9 @@ impl<RS: Read + Seek> super::Xlsx<RS> {
         // The actual cache ID will be determined by the pivot tables that reference them
         for (idx, path) in cache_paths.iter().enumerate() {
             if let Some(Ok(mut reader)) = xml_reader(&mut self.zip, path) {
-                let cache = parse_pivot_cache_metadata(&mut reader, idx as u32)?;
+                let mut cache = parse_pivot_cache_metadata(&mut reader, idx as u32)?;
+                // Store the path for later use when loading records
+                cache.cache_path = Some(path.clone());
                 // Store the cache - we'll update the ID when we find the pivot table
                 self.pivot_tables.add_cache(cache);
             }
@@ -312,14 +352,16 @@ fn parse_pivot_cache_metadata<RS: Read + Seek>(
     reader: &mut XlReader<'_, RS>,
     cache_id: u32,
 ) -> Result<PivotCache, XlsxError> {
-    let mut cache = PivotCache {
-        id: cache_id,
-        source_type: PivotSourceType::Worksheet,
-        source_range: None,
-        source_sheet: None,
-        fields: Vec::new(),
-        has_records: false,
-    };
+            let mut cache = PivotCache {
+            id: cache_id,
+            source_type: PivotSourceType::Worksheet,
+            source_range: None,
+            source_sheet: None,
+            fields: Vec::new(),
+            has_records: false,
+            records: None,
+            cache_path: None,
+        };
 
     let mut buf = Vec::new();
     let mut in_cache_source = false;
@@ -371,6 +413,29 @@ fn parse_pivot_cache_metadata<RS: Read + Seek>(
                         field.name = reader.decoder().decode(name_attr)?.into_owned();
                     }
 
+                    // Parse the cache field contents including shared items
+                    let mut inner_buf = Vec::new();
+                    loop {
+                        inner_buf.clear();
+                        match reader.read_event_into(&mut inner_buf) {
+                            Ok(Event::Start(ref inner_e)) => {
+                                match inner_e.local_name().as_ref() {
+                                    b"sharedItems" => {
+                                        // Parse shared items
+                                        field.shared_items = parse_shared_items(reader)?;
+                                    }
+                                    _ => {}
+                                }
+                            },
+                            Ok(Event::End(ref inner_e)) if inner_e.local_name().as_ref() == b"cacheField" => {
+                                break;
+                            }
+                            Ok(Event::Eof) => return Err(XlsxError::Unexpected("Unexpected EOF in cacheField")),
+                            Err(e) => return Err(XlsxError::Xml(e)),
+                            _ => {}
+                        }
+                    }
+
                     cache.fields.push(field);
                 }
                 _ => {}
@@ -387,6 +452,251 @@ fn parse_pivot_cache_metadata<RS: Read + Seek>(
     }
 
     Ok(cache)
+}
+
+/// Parse shared items from cache field
+fn parse_shared_items<RS: Read + Seek>(
+    reader: &mut XlReader<'_, RS>,
+) -> Result<Vec<Data>, XlsxError> {
+    let mut items = Vec::new();
+    let mut buf = Vec::new();
+
+    loop {
+        buf.clear();
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                // Check if this is a self-closing element with attributes
+                if e.attributes().count() > 0 {
+                    match e.local_name().as_ref() {
+                        b"s" => {
+                            // String item
+                            if let Some(v_attr) = get_attribute(e.attributes(), QName(b"v"))? {
+                                let v_str = reader.decoder().decode(v_attr)?;
+                                items.push(Data::String(v_str.into_owned()));
+                            }
+                        }
+                        b"n" => {
+                            // Number item
+                            if let Some(v_attr) = get_attribute(e.attributes(), QName(b"v"))? {
+                                let v_str = reader.decoder().decode(v_attr)?;
+                                if let Ok(num) = v_str.parse::<f64>() {
+                                    items.push(Data::Float(num));
+                                } else {
+                                    items.push(Data::String(v_str.into_owned()));
+                                }
+                            }
+                        }
+                        b"d" => {
+                            // Date item
+                            if let Some(v_attr) = get_attribute(e.attributes(), QName(b"v"))? {
+                                let v_str = reader.decoder().decode(v_attr)?;
+                                items.push(Data::String(v_str.into_owned())); // TODO: Parse as date
+                            }
+                        }
+                        b"b" => {
+                            // Boolean item
+                            if let Some(v_attr) = get_attribute(e.attributes(), QName(b"v"))? {
+                                let v_str = reader.decoder().decode(v_attr)?;
+                                items.push(Data::Bool(v_str == "1" || v_str.to_lowercase() == "true"));
+                            }
+                        }
+                        b"m" => {
+                            // Missing item
+                            items.push(Data::Empty);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Ok(Event::Empty(ref e)) => {
+                match e.local_name().as_ref() {
+                b"s" => {
+                    // String item
+                    if let Some(v_attr) = get_attribute(e.attributes(), QName(b"v"))? {
+                        let v_str = reader.decoder().decode(v_attr)?;
+                        items.push(Data::String(v_str.into_owned()));
+                    }
+                }
+                b"n" => {
+                    // Number item
+                    if let Some(v_attr) = get_attribute(e.attributes(), QName(b"v"))? {
+                        let v_str = reader.decoder().decode(v_attr)?;
+                        if let Ok(num) = v_str.parse::<f64>() {
+                            items.push(Data::Float(num));
+                        } else {
+                            items.push(Data::String(v_str.into_owned()));
+                        }
+                    }
+                }
+                b"d" => {
+                    // Date item
+                    if let Some(v_attr) = get_attribute(e.attributes(), QName(b"v"))? {
+                        let v_str = reader.decoder().decode(v_attr)?;
+                        items.push(Data::String(v_str.into_owned())); // TODO: Parse as date
+                    }
+                }
+                b"b" => {
+                    // Boolean item
+                    if let Some(v_attr) = get_attribute(e.attributes(), QName(b"v"))? {
+                        let v_str = reader.decoder().decode(v_attr)?;
+                        items.push(Data::Bool(v_str == "1" || v_str.to_lowercase() == "true"));
+                    }
+                }
+                b"m" => {
+                    // Missing item
+                    items.push(Data::Empty);
+                }
+                _ => {}
+                }
+            },
+            Ok(Event::End(ref e)) if e.local_name().as_ref() == b"sharedItems" => {
+                break;
+            }
+            Ok(Event::Eof) => return Err(XlsxError::Unexpected("Unexpected EOF in sharedItems")),
+            Err(e) => return Err(XlsxError::Xml(e)),
+            _ => {}
+        }
+    }
+
+    Ok(items)
+}
+
+/// Parse pivot cache records from pivotCacheRecords{n}.xml
+fn parse_pivot_cache_records<RS: Read + Seek>(
+    reader: &mut XlReader<'_, RS>,
+    fields: &[PivotCacheField],
+) -> Result<Vec<Vec<Data>>, XlsxError> {
+    let mut records = Vec::new();
+    let mut buf = Vec::new();
+    let mut current_record = Vec::new();
+    let mut field_index = 0;
+
+    loop {
+        buf.clear();
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                match e.local_name().as_ref() {
+                b"r" => {
+                    // Start of a new record
+                    current_record.clear();
+                    field_index = 0;
+                }
+                b"x" => {
+                    // Indexed value (references shared items)
+                    if let Some(v_attr) = get_attribute(e.attributes(), QName(b"v"))? {
+                        let v_str = reader.decoder().decode(v_attr)?;
+                        if let Ok(index) = v_str.parse::<usize>() {
+                            if field_index < fields.len() {
+                                if let Some(item) = fields[field_index].shared_items.get(index) {
+                                    current_record.push(item.clone());
+                                } else {
+                                    current_record.push(Data::Empty);
+                                }
+                            }
+                        }
+                    }
+                    field_index += 1;
+                }
+                b"s" | b"n" | b"d" | b"b" => {
+                    // These elements have values in 'v' attribute
+                    if let Some(v_attr) = get_attribute(e.attributes(), QName(b"v"))? {
+                        let v_str = reader.decoder().decode(v_attr)?;
+                        let data = match e.local_name().as_ref() {
+                            b"s" => Data::String(v_str.into_owned()),
+                            b"n" => {
+                                if let Ok(num) = v_str.parse::<f64>() {
+                                    Data::Float(num)
+                                } else {
+                                    Data::String(v_str.into_owned())
+                                }
+                            }
+                            b"d" => Data::String(v_str.into_owned()), // TODO: Parse as date
+                            b"b" => Data::Bool(v_str == "1" || v_str.to_lowercase() == "true"),
+                            _ => Data::Empty,
+                        };
+                        current_record.push(data);
+                    } else {
+                        current_record.push(Data::Empty);
+                    }
+                    field_index += 1;
+                }
+                b"m" => {
+                    // Missing value
+                    current_record.push(Data::Empty);
+                    field_index += 1;
+                }
+                _ => {}
+                }
+            },
+            Ok(Event::Empty(ref e)) => {
+                // Handle self-closing tags with values in attributes
+                match e.local_name().as_ref() {
+                    b"x" => {
+                        // Indexed value (references shared items)
+                        if let Some(v_attr) = get_attribute(e.attributes(), QName(b"v"))? {
+                            let v_str = reader.decoder().decode(v_attr)?;
+                            if let Ok(index) = v_str.parse::<usize>() {
+                                if field_index < fields.len() {
+                                    if let Some(item) = fields[field_index].shared_items.get(index) {
+                                        current_record.push(item.clone());
+                                    } else {
+                                        current_record.push(Data::Empty);
+                                    }
+                                }
+                            }
+                        }
+                        field_index += 1;
+                    }
+                    b"s" | b"n" | b"d" | b"b" => {
+                        // These elements have values in 'v' attribute
+                        if let Some(v_attr) = get_attribute(e.attributes(), QName(b"v"))? {
+                            let v_str = reader.decoder().decode(v_attr)?;
+                            let data = match e.local_name().as_ref() {
+                                b"s" => Data::String(v_str.into_owned()),
+                                b"n" => {
+                                    if let Ok(num) = v_str.parse::<f64>() {
+                                        Data::Float(num)
+                                    } else {
+                                        Data::String(v_str.into_owned())
+                                    }
+                                }
+                                b"d" => Data::String(v_str.into_owned()), // TODO: Parse as date
+                                b"b" => Data::Bool(v_str == "1" || v_str.to_lowercase() == "true"),
+                                _ => Data::Empty,
+                            };
+                            current_record.push(data.clone());
+                            println!("DEBUG: Added data: {:?} at index {}", data, field_index);
+                        } else {
+                            current_record.push(Data::Empty);
+                            println!("DEBUG: Added empty data at index {}", field_index);
+                        }
+                        field_index += 1;
+                    }
+                    b"m" => {
+                        // Missing value
+                        current_record.push(Data::Empty);
+                        field_index += 1;
+                    }
+                    _ => {}
+                }
+            },
+            Ok(Event::End(ref e)) => match e.local_name().as_ref() {
+                b"r" => {
+                    // End of record
+                    if !current_record.is_empty() {
+                        records.push(current_record.clone());
+                    }
+                }
+                b"pivotCacheRecords" => break,
+                _ => {}
+            },
+            Ok(Event::Eof) => break,
+            Err(e) => return Err(XlsxError::Xml(e)),
+            _ => {}
+        }
+    }
+
+    Ok(records)
 }
 
 /// Parse basic pivot table info

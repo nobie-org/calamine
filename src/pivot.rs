@@ -157,6 +157,10 @@ pub struct PivotCache {
     pub fields: Vec<PivotCacheField>,
     /// Whether the cache has records
     pub has_records: bool,
+    /// Cache records data (when loaded)
+    pub records: Option<Vec<Vec<Data>>>,
+    /// Path to the cache definition file (internal use)
+    pub(crate) cache_path: Option<String>,
 }
 
 /// Type of pivot table data source
