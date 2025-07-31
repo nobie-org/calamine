@@ -30,6 +30,17 @@ pub struct PivotTable {
     pub filters: Vec<PivotFilter>,
 }
 
+/// Represents an item in a pivot field
+#[derive(Debug, Clone)]
+pub struct PivotItem {
+    /// Index in the cache shared items
+    pub cache_index: Option<u32>,
+    /// Custom name (if renamed)
+    pub custom_name: Option<String>,
+    /// Item type (e.g., "default" for subtotals)
+    pub item_type: Option<String>,
+}
+
 /// Represents a field in a pivot table
 #[derive(Debug, Clone)]
 pub struct PivotField {
@@ -39,6 +50,8 @@ pub struct PivotField {
     pub field_type: PivotFieldType,
     /// Field items (unique values)
     pub items: Vec<String>,
+    /// Detailed item information
+    pub item_details: Vec<PivotItem>,
     /// Field index in the cache
     pub cache_index: Option<u32>,
 }

@@ -45,10 +45,21 @@ fn test_get_pivot_table() {
 
     println!("Pivot table: {:#?}", pivot);
 
+    // Check renamed items in fields
+    for (i, field) in pivot.fields.iter().enumerate() {
+        println!("Field {}: {} - items: {:?}", i, field.name, field.items);
+    }
+
     assert_eq!(pivot.name, "SalesSummary");
     assert_eq!(pivot.sheet_name, "Reports");
     assert_eq!(pivot.source_range, Some("A1:D5".to_string()));
     assert_eq!(pivot.source_sheet, Some("Sales".to_string()));
+    
+    // Check that the Product field has renamed Orange item
+    if let Some(product_field) = pivot.fields.iter().find(|f| f.name == "Product") {
+        assert!(product_field.items.contains(&"Renamed Orange".to_string()), 
+                "Product field should contain 'Renamed Orange' not 'Orange'");
+    }
 }
 
 #[test]

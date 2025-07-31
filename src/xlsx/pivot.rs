@@ -4,8 +4,8 @@ use quick_xml::{events::Event, name::QName};
 use std::io::{Read, Seek};
 
 use crate::pivot::{
-    PivotCache, PivotCacheField, PivotField, PivotFieldDataType, PivotFieldType, PivotSourceType,
-    PivotTable, PivotTableInfo,
+    PivotCache, PivotCacheField, PivotField, PivotFieldDataType, PivotFieldType, PivotItem,
+    PivotSourceType, PivotTable, PivotTableInfo,
 };
 use crate::{Data, Reader, XlsxError};
 
@@ -286,16 +286,49 @@ impl<RS: Read + Seek> super::Xlsx<RS> {
                         }
                     }
                     b"pivotField" => {
-                        // Simple field parsing for Phase 1
-                        let field = PivotField {
+                        let mut field = PivotField {
                             name: format!("Field{}", field_index),
                             field_type: PivotFieldType::Hidden,
                             items: Vec::new(),
+                            item_details: Vec::new(),
                             cache_index: Some(field_index),
                         };
 
-                        pivot.fields.push(field);
+                        // Check if this is a row/column field
+                        if let Some(axis_attr) = get_attribute(e.attributes(), QName(b"axis"))? {
+                            let axis_str = reader.decoder().decode(axis_attr)?;
+                            field.field_type = match axis_str.as_ref() {
+                                "axisRow" => PivotFieldType::Row,
+                                "axisCol" => PivotFieldType::Column,
+                                "axisPage" => PivotFieldType::Page,
+                                _ => PivotFieldType::Hidden,
+                            };
+                        }
 
+                        // Parse the field contents including items
+                        let mut inner_buf = Vec::new();
+                        loop {
+                            inner_buf.clear();
+                            match reader.read_event_into(&mut inner_buf) {
+                                Ok(Event::Start(ref inner_e)) => {
+                                    match inner_e.local_name().as_ref() {
+                                        b"items" => {
+                                            // Parse items
+                                            field.item_details = parse_pivot_items(&mut reader)?;
+                                        }
+                                        _ => {}
+                                    }
+                                },
+                                Ok(Event::End(ref inner_e)) if inner_e.local_name().as_ref() == b"pivotField" => {
+                                    break;
+                                }
+                                Ok(Event::Eof) => break,
+                                Err(e) => return Err(XlsxError::Xml(e)),
+                                _ => {}
+                            }
+                        }
+
+                        pivot.fields.push(field);
                         field_index += 1;
                     }
                     _ => {}
@@ -321,10 +354,44 @@ impl<RS: Read + Seek> super::Xlsx<RS> {
                     let mut cache = cache.clone();
                     cache.id = pivot.cache_id;
 
-                    // Update field names from cache
+                    // Update field names from cache and build items list
                     for (i, field) in pivot.fields.iter_mut().enumerate() {
                         if let Some(cache_field) = cache.fields.get(i) {
                             field.name = cache_field.name.clone();
+                            
+                            // Build items list using custom names if available
+                            for item_detail in &field.item_details {
+                                let item_name = if let Some(ref custom_name) = item_detail.custom_name {
+                                    // Use custom name if present
+                                    custom_name.clone()
+                                } else if let Some(index) = item_detail.cache_index {
+                                    // Otherwise use shared item at this index
+                                    if let Some(shared_item) = cache_field.shared_items.get(index as usize) {
+                                        match shared_item {
+                                            Data::String(s) => s.clone(),
+                                            Data::Float(f) => f.to_string(),
+                                            Data::Int(i) => i.to_string(),
+                                            Data::Bool(b) => b.to_string(),
+                                            Data::DateTime(dt) => dt.to_string(),
+                                            Data::DateTimeIso(s) => s.clone(),
+                                            Data::DurationIso(s) => s.clone(),
+                                            Data::Error(e) => format!("#{:?}", e),
+                                            Data::Empty => String::new(),
+                                        }
+                                    } else {
+                                        format!("Item {}", index)
+                                    }
+                                } else if let Some(ref item_type) = item_detail.item_type {
+                                    // Special items like "default" for subtotals
+                                    format!("({})", item_type)
+                                } else {
+                                    String::new()
+                                };
+                                
+                                if !item_name.is_empty() {
+                                    field.items.push(item_name);
+                                }
+                            }
                         }
                     }
 
@@ -333,10 +400,34 @@ impl<RS: Read + Seek> super::Xlsx<RS> {
                 }
             }
         } else if let Some(cache) = self.pivot_tables.caches.get(&pivot.cache_id) {
-            // Update field names from cache
+            // Update field names from cache and build items list
             for (i, field) in pivot.fields.iter_mut().enumerate() {
                 if let Some(cache_field) = cache.fields.get(i) {
                     field.name = cache_field.name.clone();
+                    
+                    // Build items list using custom names if available
+                    for item_detail in &field.item_details {
+                        let item_name = if let Some(ref custom_name) = item_detail.custom_name {
+                            // Use custom name if present
+                            custom_name.clone()
+                        } else if let Some(index) = item_detail.cache_index {
+                            // Otherwise use shared item at this index
+                            if let Some(shared_item) = cache_field.shared_items.get(index as usize) {
+                                format!("{:?}", shared_item)
+                            } else {
+                                format!("Item {}", index)
+                            }
+                        } else if let Some(ref item_type) = item_detail.item_type {
+                            // Special items like "default" for subtotals
+                            format!("({})", item_type)
+                        } else {
+                            String::new()
+                        };
+                        
+                        if !item_name.is_empty() {
+                            field.items.push(item_name);
+                        }
+                    }
                 }
             }
             // Also get source sheet
@@ -553,6 +644,90 @@ fn parse_shared_items<RS: Read + Seek>(
                 break;
             }
             Ok(Event::Eof) => return Err(XlsxError::Unexpected("Unexpected EOF in sharedItems")),
+            Err(e) => return Err(XlsxError::Xml(e)),
+            _ => {}
+        }
+    }
+
+    Ok(items)
+}
+
+/// Parse pivot items from a pivotField
+fn parse_pivot_items<RS: Read + Seek>(
+    reader: &mut XlReader<'_, RS>,
+) -> Result<Vec<PivotItem>, XlsxError> {
+    
+    let mut items = Vec::new();
+    let mut buf = Vec::new();
+
+    loop {
+        buf.clear();
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                if e.local_name().as_ref() == b"item" {
+                    let mut item = PivotItem {
+                        cache_index: None,
+                        custom_name: None,
+                        item_type: None,
+                    };
+
+                    // Get the index reference
+                    if let Some(x_attr) = get_attribute(e.attributes(), QName(b"x"))? {
+                        let x_str = reader.decoder().decode(x_attr)?;
+                        if let Ok(index) = x_str.parse::<u32>() {
+                            item.cache_index = Some(index);
+                        }
+                    }
+
+                    // Get custom name if present
+                    if let Some(n_attr) = get_attribute(e.attributes(), QName(b"n"))? {
+                        item.custom_name = Some(reader.decoder().decode(n_attr)?.into_owned());
+                    }
+
+                    // Get item type if present
+                    if let Some(t_attr) = get_attribute(e.attributes(), QName(b"t"))? {
+                        item.item_type = Some(reader.decoder().decode(t_attr)?.into_owned());
+                    }
+
+                    items.push(item);
+                }
+            }
+            Ok(Event::Empty(ref e)) => {
+                match e.local_name().as_ref() {
+                b"item" => {
+                    let mut item = PivotItem {
+                        cache_index: None,
+                        custom_name: None,
+                        item_type: None,
+                    };
+
+                    // Get the index reference
+                    if let Some(x_attr) = get_attribute(e.attributes(), QName(b"x"))? {
+                        let x_str = reader.decoder().decode(x_attr)?;
+                        if let Ok(index) = x_str.parse::<u32>() {
+                            item.cache_index = Some(index);
+                        }
+                    }
+
+                    // Get custom name if present
+                    if let Some(n_attr) = get_attribute(e.attributes(), QName(b"n"))? {
+                        item.custom_name = Some(reader.decoder().decode(n_attr)?.into_owned());
+                    }
+
+                    // Get item type if present
+                    if let Some(t_attr) = get_attribute(e.attributes(), QName(b"t"))? {
+                        item.item_type = Some(reader.decoder().decode(t_attr)?.into_owned());
+                    }
+
+                    items.push(item);
+                }
+                _ => {}
+                }
+            },
+            Ok(Event::End(ref e)) if e.local_name().as_ref() == b"items" => {
+                break;
+            }
+            Ok(Event::Eof) => return Err(XlsxError::Unexpected("Unexpected EOF in items")),
             Err(e) => return Err(XlsxError::Xml(e)),
             _ => {}
         }
