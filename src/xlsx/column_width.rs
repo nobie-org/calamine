@@ -1,89 +1,121 @@
-use std::collections::BTreeMap;
 
-/// Column width information for a single column or range of columns
+/// Raw column definition from Excel XML
 #[derive(Debug, Clone)]
-pub struct ColumnWidth {
-    /// Width in character units (0-255)
-    pub width: u8,
-    /// Whether this is a custom width (true if user changed it)
-    pub custom_width: bool,
-    /// Whether to use best fit width (auto-size)
-    pub best_fit: bool,
+pub struct ColumnDefinition {
+    /// min attribute: First column affected (1-based, 1-16384)
+    pub min: u32,
+    /// max attribute: Last column affected (1-based, 1-16384)
+    pub max: u32,
+    /// width attribute: Column width as a double
+    pub width: Option<f64>,
+    /// style attribute: Style index (0-65429)
+    pub style: Option<u32>,
+    /// customWidth attribute
+    pub custom_width: Option<bool>,
+    /// bestFit attribute
+    pub best_fit: Option<bool>,
+    /// hidden attribute
+    pub hidden: Option<bool>,
+    /// outlineLevel attribute (0-7)
+    pub outline_level: Option<u8>,
+    /// collapsed attribute
+    pub collapsed: Option<bool>,
 }
 
-/// Sheet format properties containing default column widths
+/// Raw sheet format properties from XML
 #[derive(Debug, Clone, Default)]
 pub struct SheetFormatProperties {
-    /// Default column width in character units
-    pub default_col_width: Option<u8>,
-    /// Base column width in character units
+    /// defaultColWidth attribute
+    pub default_col_width: Option<f64>,
+    /// baseColWidth attribute
     pub base_col_width: Option<u8>,
+    /// defaultRowHeight attribute
+    pub default_row_height: Option<f64>,
+    /// customHeight attribute
+    pub custom_height: Option<bool>,
+    /// zeroHeight attribute
+    pub zero_height: Option<bool>,
+    /// thickTop attribute
+    pub thick_top: Option<bool>,
+    /// thickBottom attribute
+    pub thick_bottom: Option<bool>,
+    /// outlineLevelRow attribute
+    pub outline_level_row: Option<u8>,
+    /// outlineLevelCol attribute
+    pub outline_level_col: Option<u8>,
 }
 
-/// Container for all column width information in a worksheet
+/// Raw column data from Excel worksheet
 #[derive(Debug, Clone, Default)]
 pub struct ColumnWidths {
-    /// Column-specific widths (key is column index, 0-based)
-    /// Stored as BTreeMap for efficient range queries
-    pub columns: BTreeMap<u32, ColumnWidth>,
-    /// Sheet format properties with defaults
+    /// Column definitions in document order
+    pub column_definitions: Vec<ColumnDefinition>,
+    /// Sheet format properties
     pub sheet_format: SheetFormatProperties,
 }
 
 impl ColumnWidths {
-    /// Create a new empty ColumnWidths container
+    /// Create new empty container
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Add a column width for a range of columns
-    pub fn add_column_range(&mut self, min_col: u32, max_col: u32, width: ColumnWidth) {
-        for col in min_col..=max_col {
-            self.columns.insert(col, width.clone());
+    /// Add a column definition
+    pub fn add_column_definition(&mut self, def: ColumnDefinition) {
+        self.column_definitions.push(def);
+    }
+
+    /// Find column definitions that include a specific column (1-based)
+    pub fn find_definitions_for_column(&self, col_index: u32) -> Vec<&ColumnDefinition> {
+        self.column_definitions
+            .iter()
+            .filter(|def| col_index >= def.min && col_index <= def.max)
+            .collect()
+    }
+}
+
+/// Utility functions for Excel column width conversions
+pub mod utils {
+    /// Apply Excel default logic to get effective column width
+    /// Returns width in Excel's character units
+    pub fn get_effective_width(
+        column_width: Option<f64>,
+        default_col_width: Option<f64>,
+        base_col_width: Option<u8>,
+    ) -> f64 {
+        if let Some(width) = column_width {
+            return width;
         }
-    }
-
-    /// Get the width for a specific column (0-based index)
-    /// Returns the width in character units (0-255)
-    pub fn get_column_width(&self, col_index: u32) -> u8 {
-        if let Some(col_width) = self.columns.get(&col_index) {
-            return col_width.width;
+        
+        if let Some(default) = default_col_width {
+            return default;
         }
-
-        // Use default width if no specific width is set
-        if let Some(default_width) = self.sheet_format.default_col_width {
-            default_width
-        } else if let Some(base_width) = self.sheet_format.base_col_width {
-            // Excel default: base width + 5 pixels (converted to character units)
-            // Using the default MDW of 7 pixels for Calibri 11
-            base_width.saturating_add(1) // approximately 5/7
-        } else {
-            // Excel's ultimate default is 8.43 character units
-            8
+        
+        if let Some(base) = base_col_width {
+            // Excel's formula for default width from base
+            return base as f64 + 5.0 / 7.0;
         }
+        
+        // Excel's ultimate default
+        8.43
     }
 
-    /// Convert character units to pixels
-    /// mdw: Maximum digit width in pixels (typically 7 for Calibri 11 at 96 DPI)
-    pub fn character_units_to_pixels(width: u8, mdw: f64) -> u32 {
-        // Formula from Excel spec: pixels = FLOOR(width * MDW + 0.5) + 5
-        ((width as f64 * mdw + 0.5).floor() + 5.0) as u32
+    /// Convert character units to pixels  
+    /// mdw: Maximum digit width in pixels
+    pub fn character_units_to_pixels(width: f64, mdw: f64) -> u32 {
+        ((width * mdw + 0.5).floor() + 5.0) as u32
     }
 
-    /// Convert pixels to character units
-    /// mdw: Maximum digit width in pixels (typically 7 for Calibri 11 at 96 DPI)
-    pub fn pixels_to_character_units(pixels: u32, mdw: f64) -> u8 {
-        // Formula: storedWidth = TRUNC(((pixels - 5) / MDW) * 256) / 256
-        let raw = ((pixels as f64 - 5.0) / mdw).clamp(0.0, 255.0);
-        raw as u8
+    /// Convert pixels to character units using Excel's formula
+    /// mdw: Maximum digit width in pixels
+    pub fn pixels_to_character_units(pixels: u32, mdw: f64) -> f64 {
+        // Formula from MS docs: =Truncate(({pixels}-5)/{Maximum Digit Width} * 100+0.5)/100
+        ((pixels as f64 - 5.0) / mdw * 100.0 + 0.5).trunc() / 100.0
     }
 
-    /// Get the pixel width for a specific column
-    /// mdw: Maximum digit width in pixels (defaults to 7 for Calibri 11)
-    pub fn get_column_width_pixels(&self, col_index: u32, mdw: Option<f64>) -> u32 {
-        let width = self.get_column_width(col_index);
-        let mdw = mdw.unwrap_or(7.0);
-        Self::character_units_to_pixels(width, mdw)
+    /// Convert Excel 1-based column index to 0-based
+    pub fn to_zero_based(excel_col_index: u32) -> u32 {
+        excel_col_index.saturating_sub(1)
     }
 }
 
@@ -92,35 +124,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_default_width() {
-        let widths = ColumnWidths::new();
-        assert_eq!(widths.get_column_width(0), 8);
-    }
-
-    #[test]
-    fn test_custom_width() {
+    fn test_raw_storage() {
         let mut widths = ColumnWidths::new();
-        widths.add_column_range(
-            0,
-            0,
-            ColumnWidth {
-                width: 10,
-                custom_width: true,
-                best_fit: false,
-            },
-        );
-        assert_eq!(widths.get_column_width(0), 10);
-        assert_eq!(widths.get_column_width(1), 8);
+        widths.add_column_definition(ColumnDefinition {
+            min: 1,
+            max: 3,
+            width: Some(10.5),
+            style: Some(1),
+            custom_width: Some(true),
+            best_fit: Some(false),
+            hidden: None,
+            outline_level: None,
+            collapsed: None,
+        });
+        
+        let defs = widths.find_definitions_for_column(2);
+        assert_eq!(defs.len(), 1);
+        assert_eq!(defs[0].width.unwrap(), 10.5);
     }
 
     #[test]
-    fn test_pixel_conversion() {
-        // Test Excel default: 8 character units ≈ 61 pixels
-        let pixels = ColumnWidths::character_units_to_pixels(8, 7.0);
-        assert_eq!(pixels, 61);
-
-        // Test reverse conversion
-        let chars = ColumnWidths::pixels_to_character_units(64, 7.0);
-        assert_eq!(chars, 8); // 64 pixels converts to 8 character units
+    fn test_utility_functions() {
+        // Test effective width
+        assert_eq!(utils::get_effective_width(Some(10.5), None, None), 10.5);
+        assert_eq!(utils::get_effective_width(None, Some(9.0), None), 9.0);
+        assert_eq!(utils::get_effective_width(None, None, None), 8.43);
+        
+        // Test pixel conversions
+        assert_eq!(utils::character_units_to_pixels(8.0, 7.0), 61);
+        // Test pixel to character conversion
+        assert_eq!(utils::pixels_to_character_units(61, 7.0), 8.0);
     }
 }

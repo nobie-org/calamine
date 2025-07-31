@@ -1,5 +1,5 @@
 mod cells_reader;
-mod column_width;
+pub mod column_width;
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -31,7 +31,7 @@ use crate::{
     ReaderRef, Sheet, SheetType, SheetVisible, Table,
 };
 pub use cells_reader::XlsxCellReader;
-pub use column_width::{ColumnWidth, ColumnWidths};
+pub use column_width::{ColumnDefinition, ColumnWidths, SheetFormatProperties};
 
 pub(crate) type XlReader<'a, RS> = XmlReader<BufReader<ZipFile<'a, RS>>>;
 

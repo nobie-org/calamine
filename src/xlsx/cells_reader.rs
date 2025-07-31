@@ -10,7 +10,7 @@ use std::{
 
 use super::{
     get_attribute, get_dimension, get_row, get_row_column, read_string, replace_cell_names,
-    ColumnWidth, ColumnWidths, Dimensions, XlReader,
+    ColumnDefinition, ColumnWidths, Dimensions, XlReader,
 };
 use crate::{
     datatype::DataRef,
@@ -71,7 +71,7 @@ where
                         return Err(XlsxError::UnexpectedNode("dimension"));
                     }
                     b"sheetFormatPr" => {
-                        // Parse sheet format properties for default column widths
+                        // Parse sheet format properties - store raw values
                         for a in e.attributes() {
                             match a.map_err(XlsxError::XmlAttr)? {
                                 Attribute {
@@ -80,8 +80,7 @@ where
                                 } => {
                                     if let Ok(width_str) = xml.decoder().decode(&v) {
                                         if let Ok(width) = width_str.parse::<f64>() {
-                                            column_widths.sheet_format.default_col_width =
-                                                Some(width as u8);
+                                            column_widths.sheet_format.default_col_width = Some(width);
                                         }
                                     }
                                 }
@@ -90,9 +89,18 @@ where
                                     value: v,
                                 } => {
                                     if let Ok(width_str) = xml.decoder().decode(&v) {
-                                        if let Ok(width) = width_str.parse::<f64>() {
-                                            column_widths.sheet_format.base_col_width =
-                                                Some(width as u8);
+                                        if let Ok(width) = width_str.parse::<u8>() {
+                                            column_widths.sheet_format.base_col_width = Some(width);
+                                        }
+                                    }
+                                }
+                                Attribute {
+                                    key: QName(b"defaultRowHeight"),
+                                    value: v,
+                                } => {
+                                    if let Ok(height_str) = xml.decoder().decode(&v) {
+                                        if let Ok(height) = height_str.parse::<f64>() {
+                                            column_widths.sheet_format.default_row_height = Some(height);
                                         }
                                     }
                                 }
@@ -101,7 +109,7 @@ where
                         }
                     }
                     b"cols" => {
-                        // Parse column definitions
+                        // Parse column definitions - store raw values
                         let mut inner_buf = Vec::with_capacity(512);
                         loop {
                             inner_buf.clear();
@@ -112,11 +120,17 @@ where
                                 Event::Start(ref col) | Event::Empty(ref col)
                                     if col.local_name().as_ref() == b"col" =>
                                 {
-                                    let mut min = 1u32;
-                                    let mut max = 1u32;
-                                    let mut width = 8u8;
-                                    let mut custom_width = false;
-                                    let mut best_fit = false;
+                                    let mut def = ColumnDefinition {
+                                        min: 1,
+                                        max: 1,
+                                        width: None,
+                                        style: None,
+                                        custom_width: None,
+                                        best_fit: None,
+                                        hidden: None,
+                                        outline_level: None,
+                                        collapsed: None,
+                                    };
 
                                     for a in col.attributes() {
                                         match a.map_err(XlsxError::XmlAttr)? {
@@ -124,52 +138,66 @@ where
                                                 key: QName(b"min"),
                                                 value: v,
                                             } => {
-                                                min = atoi_simd::parse::<u32>(&v).unwrap_or(1);
+                                                def.min = atoi_simd::parse::<u32>(&v).unwrap_or(1);
                                             }
                                             Attribute {
                                                 key: QName(b"max"),
                                                 value: v,
                                             } => {
-                                                max = atoi_simd::parse::<u32>(&v).unwrap_or(1);
+                                                def.max = atoi_simd::parse::<u32>(&v).unwrap_or(1);
                                             }
                                             Attribute {
                                                 key: QName(b"width"),
                                                 value: v,
                                             } => {
                                                 if let Ok(width_str) = xml.decoder().decode(&v) {
-                                                    if let Ok(w) = width_str.parse::<f64>() {
-                                                        width = w as u8;
+                                                    if let Ok(width) = width_str.parse::<f64>() {
+                                                        def.width = Some(width);
                                                     }
                                                 }
+                                            }
+                                            Attribute {
+                                                key: QName(b"style"),
+                                                value: v,
+                                            } => {
+                                                def.style = atoi_simd::parse::<u32>(&v).ok();
                                             }
                                             Attribute {
                                                 key: QName(b"customWidth"),
                                                 value: v,
                                             } => {
-                                                custom_width = &*v == b"1" || &*v == b"true";
+                                                def.custom_width = Some(&*v == b"1" || &*v == b"true");
                                             }
                                             Attribute {
                                                 key: QName(b"bestFit"),
                                                 value: v,
                                             } => {
-                                                best_fit = &*v == b"1" || &*v == b"true";
+                                                def.best_fit = Some(&*v == b"1" || &*v == b"true");
+                                            }
+                                            Attribute {
+                                                key: QName(b"hidden"),
+                                                value: v,
+                                            } => {
+                                                def.hidden = Some(&*v == b"1" || &*v == b"true");
+                                            }
+                                            Attribute {
+                                                key: QName(b"outlineLevel"),
+                                                value: v,
+                                            } => {
+                                                def.outline_level = atoi_simd::parse::<u8>(&v).ok();
+                                            }
+                                            Attribute {
+                                                key: QName(b"collapsed"),
+                                                value: v,
+                                            } => {
+                                                def.collapsed = Some(&*v == b"1" || &*v == b"true");
                                             }
                                             _ => {}
                                         }
                                     }
 
-                                    // Excel uses 1-based column indices, convert to 0-based
-                                    if min > 0 && max > 0 {
-                                        column_widths.add_column_range(
-                                            min - 1,
-                                            max - 1,
-                                            ColumnWidth {
-                                                width,
-                                                custom_width,
-                                                best_fit,
-                                            },
-                                        );
-                                    }
+                                    // Store raw column definition without conversion
+                                    column_widths.add_column_definition(def);
                                 }
                                 Event::End(ref e) if e.local_name().as_ref() == b"cols" => break,
                                 Event::Eof => return Err(XlsxError::XmlEof("cols")),

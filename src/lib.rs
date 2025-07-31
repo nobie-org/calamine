@@ -102,7 +102,7 @@ pub use crate::formats::{
 pub use crate::ods::{Ods, OdsError};
 pub use crate::xls::{Xls, XlsError, XlsOptions};
 pub use crate::xlsb::{Xlsb, XlsbError};
-pub use crate::xlsx::{ColumnWidth, ColumnWidths, Xlsx, XlsxError};
+pub use crate::xlsx::{ColumnDefinition, ColumnWidths, SheetFormatProperties, Xlsx, XlsxError};
 
 use crate::vba::VbaProject;
 
