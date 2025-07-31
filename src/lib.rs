@@ -102,7 +102,7 @@ pub use crate::formats::{
 pub use crate::ods::{Ods, OdsError};
 pub use crate::xls::{Xls, XlsError, XlsOptions};
 pub use crate::xlsb::{Xlsb, XlsbError};
-pub use crate::xlsx::{Xlsx, XlsxError};
+pub use crate::xlsx::{ColumnWidth, ColumnWidths, Xlsx, XlsxError};
 
 use crate::vba::VbaProject;
 
@@ -417,8 +417,6 @@ where
     /// Read worksheet formula in corresponding worksheet path
     fn worksheet_formula(&mut self, _: &str) -> Result<Range<DataWithFormatting>, Self::Error>;
 
-
-
     /// Get all sheet names of this workbook, in workbook order
     ///
     /// # Examples
@@ -449,7 +447,10 @@ where
 
     /// Get the nth worksheet. Shortcut for getting the nth
     /// worksheet name, then the corresponding worksheet.
-    fn worksheet_range_at(&mut self, n: usize) -> Option<Result<Range<DataWithFormatting>, Self::Error>> {
+    fn worksheet_range_at(
+        &mut self,
+        n: usize,
+    ) -> Option<Result<Range<DataWithFormatting>, Self::Error>> {
         let name = self.sheet_names().get(n)?.to_string();
         Some(self.worksheet_range(&name))
     }
