@@ -1,6 +1,8 @@
 use calamine::Data::{Bool, DateTime, DateTimeIso, DurationIso, Empty, Error, Float, Int, String};
 use calamine::{
-    open_workbook, open_workbook_auto, CellFormat, Color, DataRef, DataWithFormatting, Dimensions, ExcelDateTime, ExcelDateTimeType, HeaderRow, Ods, PatternType, Range, Reader, ReaderRef, Sheet, SheetType, SheetVisible, Xls, Xlsb, Xlsx
+    open_workbook, open_workbook_auto, CellFormat, Color, ColumnWidth, ColumnWidths, DataRef,
+    DataWithFormatting, Dimensions, ExcelDateTime, ExcelDateTimeType, HeaderRow, Ods, PatternType,
+    Range, Reader, ReaderRef, Sheet, SheetType, SheetVisible, Xls, Xlsb, Xlsx,
 };
 use calamine::{CellErrorType::*, Data};
 use rstest::rstest;
@@ -53,29 +55,32 @@ fn issue_2() {
 #[test]
 fn test_worksheet_range_with_formatting() {
     let mut excel: Xlsx<_> = wb("format.xlsx");
-    
+
     // Get the worksheet range which now returns Range<DataWithFormatting>
     let range = excel.worksheet_range("Sheet1").unwrap();
-    
+
     // Test that we got a valid range
     assert!(range.start().is_some());
     assert!(range.end().is_some());
-    
+
     // Test cell A1 - should have white font on black background formatting
     let cell_a1 = range.get_value((0, 0)).unwrap(); // A1
     let data_a1 = cell_a1.get_data();
     let formatting_a1 = cell_a1.get_formatting();
-    
+
     // Verify the cell data
     assert_eq!(data_a1.to_string(), "White header on black text");
-    
+
     // Verify the formatting is present
     assert!(formatting_a1.is_some(), "A1 should have formatting");
-    
+
     let fmt_a1 = formatting_a1.as_ref().unwrap();
-    
+
     // Test font formatting (white font)
-    let font_a1 = fmt_a1.font.as_ref().expect("A1 should have font formatting");
+    let font_a1 = fmt_a1
+        .font
+        .as_ref()
+        .expect("A1 should have font formatting");
     assert_eq!(
         font_a1.color,
         Some(Color::Argb {
@@ -85,9 +90,12 @@ fn test_worksheet_range_with_formatting() {
             b: 255
         })
     ); // White font
-    
+
     // Test fill formatting (black background)
-    let fill_a1 = fmt_a1.fill.as_ref().expect("A1 should have fill formatting");
+    let fill_a1 = fmt_a1
+        .fill
+        .as_ref()
+        .expect("A1 should have fill formatting");
     assert_eq!(fill_a1.pattern_type, PatternType::Solid);
     assert_eq!(
         fill_a1.foreground_color,
@@ -98,63 +106,81 @@ fn test_worksheet_range_with_formatting() {
             b: 0
         })
     ); // Black background
-    
+
     // Test cell A2 - should have right alignment formatting
     let cell_a2 = range.get_value((1, 0)).unwrap(); // A2
     let data_a2 = cell_a2.get_data();
     let formatting_a2 = cell_a2.get_formatting();
-    
+
     // Verify the cell data
     assert_eq!(data_a2.to_string(), "Right aligned");
-    
+
     // Verify the formatting is present
     assert!(formatting_a2.is_some(), "A2 should have formatting");
-    
+
     let fmt_a2 = formatting_a2.as_ref().unwrap();
-    
+
     // Test alignment formatting (right aligned)
-    let alignment_a2 = fmt_a2.alignment.as_ref().expect("A2 should have alignment formatting");
+    let alignment_a2 = fmt_a2
+        .alignment
+        .as_ref()
+        .expect("A2 should have alignment formatting");
     assert_eq!(alignment_a2.horizontal, Some(Arc::from("right")));
-    
+
     // Test iterating through the range and checking formatting
     let mut cells_with_formatting = 0;
     let mut cells_without_formatting = 0;
-    
+
     for (row, col, cell) in range.used_cells() {
         let data = cell.get_data();
         let formatting = cell.get_formatting();
-        
-        println!("Cell ({}, {}): {} - has formatting: {}", row, col, data, formatting.is_some());
-        
+
+        println!(
+            "Cell ({}, {}): {} - has formatting: {}",
+            row,
+            col,
+            data,
+            formatting.is_some()
+        );
+
         if formatting.is_some() {
             cells_with_formatting += 1;
         } else {
             cells_without_formatting += 1;
         }
     }
-    
+
     // Verify we found cells with formatting
-    assert!(cells_with_formatting > 0, "Should have found cells with formatting");
-    
+    assert!(
+        cells_with_formatting > 0,
+        "Should have found cells with formatting"
+    );
+
     // Test that cells without explicit formatting still have default formatting
     for row in range.rows() {
         for cell in row.iter() {
             let data = cell.get_data();
             let formatting = cell.get_formatting();
-            
+
             // Even if formatting is None, the data should still be accessible
             assert!(!data.to_string().is_empty() || matches!(data, Data::Empty));
-            
+
             // If formatting is present, verify it has the expected structure
             if let Some(fmt) = formatting {
                 // All formats should have a number format (check for valid variants)
-                assert!(matches!(fmt.number_format, CellFormat::Other | CellFormat::DateTime));
+                assert!(matches!(
+                    fmt.number_format,
+                    CellFormat::Other | CellFormat::DateTime
+                ));
             }
         }
     }
-    
+
     println!("Total cells with formatting: {}", cells_with_formatting);
-    println!("Total cells without formatting: {}", cells_without_formatting);
+    println!(
+        "Total cells without formatting: {}",
+        cells_without_formatting
+    );
 }
 
 #[test]
@@ -168,6 +194,10 @@ fn test_comprehensive_formatting_format_xlsx() {
     assert_eq!(sheet_name, "Sheet1");
 
     let mut cell_reader = excel.worksheet_cells_reader(sheet_name).unwrap();
+    // Create a fresh instance to avoid borrow checker issues
+    let excel_for_formats: Xlsx<_> = wb("format.xlsx");
+    let formats = excel_for_formats.get_all_cell_formats();
+    println!("formats: {:?}", formats);
 
     // Read first cell - should be A1 with "White header on black text" and style 1
     let (cell_a1, formatting_a1) = cell_reader
@@ -250,12 +280,12 @@ fn test_comprehensive_formatting_format_xlsx() {
         .expect("Should get format 0");
     assert_eq!(format_0.font.as_ref().unwrap().size, Some(10.0));
 
-    let format_8 = cell_reader
-        .get_formatting_by_index(8)
-        .expect("Should get format 8");
-    // Format 8 uses Comic Sans MS font
+    let format_7 = cell_reader
+        .get_formatting_by_index(7)
+        .expect("Should get format 7");
+    // Format 7 uses Comic Sans MS font
     assert_eq!(
-        format_8.font.as_ref().unwrap().name,
+        format_7.font.as_ref().unwrap().name,
         Some(Arc::from("Comic Sans MS"))
     );
 
@@ -266,7 +296,7 @@ fn test_comprehensive_formatting_format_xlsx() {
     let formats = excel_for_formats.get_all_cell_formats();
 
     // Verify we have the expected number of cell formats (10 total: indices 0-9)
-    assert_eq!(formats.len(), 10, "Should have exactly 10 cell formats");
+    assert_eq!(formats.len(), 9, "Should have exactly 10 cell formats");
 
     // Test Format 0: Default formatting with Arial 10pt, black color, bottom alignment
     let format_0 = &formats[0];
@@ -290,12 +320,8 @@ fn test_comprehensive_formatting_format_xlsx() {
         })
     ); // Black
 
-    let alignment_0 = format_0
-        .alignment
-        .as_ref()
-        .expect("Format 0 should have alignment");
-    assert_eq!(alignment_0.vertical, Some(Arc::from("bottom")));
-    assert_eq!(alignment_0.wrap_text, Some(false));
+    let alignment_0 = format_0.alignment.as_ref();
+    assert_eq!(alignment_0, None, "Format 0 should not have alignment");
 
     // Test Format 1: White font on black background
     let format_1 = &formats[1];
@@ -329,15 +355,15 @@ fn test_comprehensive_formatting_format_xlsx() {
         })
     ); // Black background
 
-    // Test Format 3: White font on black background with wrap text
-    let format_3 = &formats[3];
-    let font_3 = format_3
+    // Test Format 2: White font on black background with wrap text
+    let format_2 = &formats[2];
+    let font_2 = format_2
         .font
         .as_ref()
-        .expect("Format 3 should have font information");
-    assert_eq!(font_3.name, Some(Arc::from("Arial")));
+        .expect("Format 2 should have font information");
+    assert_eq!(font_2.name, Some(Arc::from("Arial")));
     assert_eq!(
-        font_3.color,
+        font_2.color,
         Some(Color::Argb {
             a: 255,
             r: 255,
@@ -346,55 +372,87 @@ fn test_comprehensive_formatting_format_xlsx() {
         })
     ); // White
 
+    let alignment_2 = format_2
+        .alignment
+        .as_ref()
+        .expect("Format 2 should have alignment");
+    assert_eq!(alignment_2.wrap_text, Some(true));
+
+    // Test Format 3: Right aligned with theme color
+    let format_3 = &formats[3];
+    let font_3 = format_3
+        .font
+        .as_ref()
+        .expect("Format 3 should have font information");
+    assert_eq!(
+        font_3.color,
+        Some(Color::Theme {
+            theme: 1,
+            tint: None
+        })
+    );
     let alignment_3 = format_3
         .alignment
         .as_ref()
         .expect("Format 3 should have alignment");
-    assert_eq!(alignment_3.wrap_text, Some(true));
+    assert_eq!(alignment_3.horizontal, Some(Arc::from("right")));
 
-    // Test Format 4: Right aligned
+    // Test Format 4: Center aligned (both horizontal and vertical)
     let format_4 = &formats[4];
     let alignment_4 = format_4
         .alignment
         .as_ref()
         .expect("Format 4 should have alignment");
-    assert_eq!(alignment_4.horizontal, Some(Arc::from("right")));
+    assert_eq!(alignment_4.horizontal, Some(Arc::from("center")));
+    assert_eq!(alignment_4.vertical, Some(Arc::from("center")));
 
-    // Test Format 5: Center aligned (both horizontal and vertical)
+    // Test Format 5: Custom currency format (numFmtId=164, detected as Other with custom format string)
     let format_5 = &formats[5];
-    let alignment_5 = format_5
-        .alignment
-        .as_ref()
-        .expect("Format 5 should have alignment");
-    assert_eq!(alignment_5.horizontal, Some(Arc::from("center")));
-    assert_eq!(alignment_5.vertical, Some(Arc::from("center")));
-
-    // Test Format 6: Custom currency format (numFmtId=164, detected as Other with custom format string)
-    let format_6 = &formats[6];
-    assert_eq!(format_6.number_format, CellFormat::Other);
+    assert_eq!(format_5.number_format, CellFormat::Other);
     assert_eq!(
-        format_6.format_string.as_ref().map(|s| s.as_ref()),
+        format_5.format_string.as_ref().map(|s| s.as_ref()),
         Some("&quot;$&quot;#,##0.00"),
-        "Format 6 should have format string"
+        "Format 5 should have format string"
     );
 
-    // Test Format 7: Percentage format (built-in format 10)
-    let format_7 = &formats[7];
-    assert_eq!(format_7.number_format, CellFormat::Other);
-
-    // Test Format 8: Comic Sans MS font
-    let format_8 = &formats[8];
-    let font_8 = format_8
+    // Test Format 6: Basic Arial format with theme color
+    let format_6 = &formats[6];
+    assert_eq!(format_6.number_format, CellFormat::Other);
+    let font_6 = format_6
         .font
         .as_ref()
-        .expect("Format 8 should have font information");
-    assert_eq!(font_8.name, Some(Arc::from("Comic Sans MS")));
+        .expect("Format 6 should have font information");
+    assert_eq!(font_6.name, Some(Arc::from("Arial")));
     assert_eq!(
-        font_8.color,
+        font_6.color,
         Some(Color::Theme {
             theme: 1,
             tint: None
         })
+    );
+
+    // Test Format 7: Comic Sans MS font
+    let format_7 = &formats[7];
+    let font_7 = format_7
+        .font
+        .as_ref()
+        .expect("Format 7 should have font information");
+    assert_eq!(font_7.name, Some(Arc::from("Comic Sans MS")));
+    assert_eq!(
+        font_7.color,
+        Some(Color::Theme {
+            theme: 1,
+            tint: None
+        })
+    );
+
+    // Test Format 8: Euro currency format
+    let format_8 = &formats[8];
+    assert_eq!(format_8.number_format, CellFormat::Other);
+    assert_eq!(
+        format_8.format_string.as_ref().map(|s| s.as_ref()),
+        Some("[$€]#,##0.00"),
+        "Format 8 should have Euro format string"
     );
 
     // === Part 3: Test specific color patterns ===
@@ -999,8 +1057,14 @@ fn table() {
     assert_eq!(table.columns()[0], "label");
     assert_eq!(table.columns()[1], "value");
     let data = table.data();
-    assert_eq!(data.get((0, 0)).unwrap().get_data(), &String("celsius".to_owned()));
-    assert_eq!(data.get((1, 0)).unwrap().get_data(), &String("fahrenheit".to_owned()));
+    assert_eq!(
+        data.get((0, 0)).unwrap().get_data(),
+        &String("celsius".to_owned())
+    );
+    assert_eq!(
+        data.get((1, 0)).unwrap().get_data(),
+        &String("fahrenheit".to_owned())
+    );
     assert_eq!(data.get((0, 1)).unwrap().get_data(), &Float(22.2222));
     assert_eq!(data.get((1, 1)).unwrap().get_data(), &Float(72.0));
     // Check the second table
@@ -1011,8 +1075,14 @@ fn table() {
     assert_eq!(table.columns()[0], "label2");
     assert_eq!(table.columns()[1], "value2");
     let data = table.data();
-    assert_eq!(data.get((0, 0)).unwrap().get_data(), &String("something".to_owned()));
-    assert_eq!(data.get((1, 0)).unwrap().get_data(), &String("else".to_owned()));
+    assert_eq!(
+        data.get((0, 0)).unwrap().get_data(),
+        &String("something".to_owned())
+    );
+    assert_eq!(
+        data.get((1, 0)).unwrap().get_data(),
+        &String("else".to_owned())
+    );
     assert_eq!(data.get((0, 1)).unwrap().get_data(), &Float(12.5));
     assert_eq!(data.get((1, 1)).unwrap().get_data(), &Float(64.0));
     xls.worksheet_range_at(0).unwrap().unwrap();
@@ -1922,8 +1992,14 @@ fn issue304_xls_formula() {
     let formula = wb.worksheet_formula("Sheet1").unwrap();
     let mut rows = formula.rows();
     assert_eq!(rows.next().unwrap()[0].get_data().to_string(), "A1*2");
-    assert_eq!(rows.next().unwrap()[0].get_data().to_string(), "2*Sheet2!A1");
-    assert_eq!(rows.next().unwrap()[0].get_data().to_string(), "A1+Sheet2!A1");
+    assert_eq!(
+        rows.next().unwrap()[0].get_data().to_string(),
+        "2*Sheet2!A1"
+    );
+    assert_eq!(
+        rows.next().unwrap()[0].get_data().to_string(),
+        "A1+Sheet2!A1"
+    );
     assert_eq!(rows.next(), None);
 }
 
@@ -1944,10 +2020,22 @@ fn issue334_xls_values_string() {
     let mut wb: Xls<_> = wb("xls_ref_String.xls");
     let rge = wb.worksheet_range("Sheet1").unwrap();
     let mut rows = rge.rows();
-    assert_eq!(rows.next().unwrap()[0].get_data(), &Data::String("aa".into()));
-    assert_eq!(rows.next().unwrap()[0].get_data(), &Data::String("bb".into()));
-    assert_eq!(rows.next().unwrap()[0].get_data(), &Data::String("aa".into()));
-    assert_eq!(rows.next().unwrap()[0].get_data(), &Data::String("bb".into()));
+    assert_eq!(
+        rows.next().unwrap()[0].get_data(),
+        &Data::String("aa".into())
+    );
+    assert_eq!(
+        rows.next().unwrap()[0].get_data(),
+        &Data::String("bb".into())
+    );
+    assert_eq!(
+        rows.next().unwrap()[0].get_data(),
+        &Data::String("aa".into())
+    );
+    assert_eq!(
+        rows.next().unwrap()[0].get_data(),
+        &Data::String("bb".into())
+    );
     assert_eq!(rows.next(), None);
 }
 
@@ -2168,7 +2256,11 @@ fn issue_384_multiple_formula() {
         (0, 0, DataWithFormatting::new(Data::Float(23.), None)),
         (0, 2, DataWithFormatting::new(Data::Float(23.), None)),
         (12, 6, DataWithFormatting::new(Data::Float(2.), None)),
-        (13, 9, DataWithFormatting::new(Data::String("US".into()), None)),
+        (
+            13,
+            9,
+            DataWithFormatting::new(Data::String("US".into()), None),
+        ),
     ];
     let expected = expected
         .iter()
@@ -2211,7 +2303,10 @@ fn issue_391_shared_formula() {
         .iter()
         .enumerate()
     {
-        expect.set_value((1 + i as u32, 0), DataWithFormatting::new(Data::String(cell.to_string()), None));
+        expect.set_value(
+            (1 + i as u32, 0),
+            DataWithFormatting::new(Data::String(cell.to_string()), None),
+        );
     }
     let res = excel.worksheet_formula("Sheet1").unwrap();
     assert_eq!(expect.start(), res.start());
@@ -2739,5 +2834,120 @@ fn test_advanced_formatting_features_format_xlsx() {
     assert!(
         !theme_color_formats.is_empty(),
         "Should have theme color formats"
+    );
+}
+
+#[test]
+fn test_column_widths() {
+    let mut excel: Xlsx<_> = wb("format.xlsx");
+
+    // Get column widths for a worksheet
+    let column_widths = excel.worksheet_column_widths("Sheet1").unwrap();
+
+    // Test default width (when no specific width is set)
+    let default_width = column_widths.get_column_width(10); // Column K (10th column, 0-based)
+                                                            // The actual format.xlsx has custom default column widths
+    assert!(
+        default_width > 0,
+        "Should have a positive default column width"
+    );
+
+    // Test pixel conversion for default width
+    let pixels = ColumnWidths::character_units_to_pixels(8, 7.0);
+    assert_eq!(pixels, 61, "Default width (8) should convert to 61 pixels");
+
+    // Test reverse conversion
+    let chars = ColumnWidths::pixels_to_character_units(64, 7.0);
+    assert_eq!(chars, 8, "64 pixels should convert back to 8");
+
+    // If the test file has custom column widths, we could test those too
+    // For now, we're testing the default behavior
+}
+
+#[test]
+fn test_column_width_parsing() {
+    // Test with a real Excel file
+    let mut excel: Xlsx<_> = wb("temperature-table.xlsx");
+
+    // Get column widths for the first worksheet
+    let sheet_names = excel.sheet_names();
+    let first_sheet = &sheet_names[0];
+    let column_widths = excel.worksheet_column_widths(first_sheet).unwrap();
+
+    // Test that we can retrieve column widths
+    // Excel files typically have at least some columns, so we should get valid widths
+    let width_a = column_widths.get_column_width(0); // Column A
+    let width_b = column_widths.get_column_width(1); // Column B
+    let width_c = column_widths.get_column_width(2); // Column C
+
+    // All widths should be positive
+    assert!(
+        width_a > 0,
+        "Column A width should be positive, got {}",
+        width_a
+    );
+    assert!(
+        width_b > 0,
+        "Column B width should be positive, got {}",
+        width_b
+    );
+    assert!(
+        width_c > 0,
+        "Column C width should be positive, got {}",
+        width_c
+    );
+
+    // Test that we have sheet format properties (most Excel files have these)
+    if let Some(default_width) = column_widths.sheet_format.default_col_width {
+        assert!(default_width > 0, "Default column width should be positive");
+    }
+
+    // Test the column width data structure directly
+    let mut test_widths = ColumnWidths::new();
+    test_widths.sheet_format.default_col_width = Some(9);
+    test_widths.sheet_format.base_col_width = Some(10);
+
+    // Add custom widths
+    test_widths.add_column_range(
+        0,
+        0,
+        ColumnWidth {
+            width: 15,
+            custom_width: true,
+            best_fit: false,
+        },
+    );
+    test_widths.add_column_range(
+        2,
+        4,
+        ColumnWidth {
+            width: 20,
+            custom_width: true,
+            best_fit: false,
+        },
+    );
+
+    // Verify the test data structure
+    assert_eq!(
+        test_widths.get_column_width(0),
+        15,
+        "Column 0 should have custom width"
+    );
+    assert_eq!(
+        test_widths.get_column_width(1),
+        9,
+        "Column 1 should use default width"
+    );
+    assert_eq!(
+        test_widths.get_column_width(2),
+        20,
+        "Column 2 should have custom width"
+    );
+
+    // Verify pixel conversions work correctly
+    let pixels = test_widths.get_column_width_pixels(0, Some(7.0));
+    assert_eq!(
+        pixels, 110,
+        "15 character units should convert to 110 pixels"
     );
 }

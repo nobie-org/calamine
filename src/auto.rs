@@ -3,8 +3,8 @@
 use crate::errors::Error;
 use crate::vba::VbaProject;
 use crate::{
-    open_workbook, open_workbook_from_rs, DataRef, DataWithFormatting, HeaderRow, Metadata, Ods, Range, Reader,
-    ReaderRef, Xls, Xlsb, Xlsx,
+    open_workbook, open_workbook_from_rs, DataRef, DataWithFormatting, HeaderRow, Metadata, Ods,
+    Range, Reader, ReaderRef, Xls, Xlsb, Xlsx,
 };
 use std::borrow::Cow;
 use std::fs::File;

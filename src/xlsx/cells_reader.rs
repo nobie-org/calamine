@@ -10,7 +10,7 @@ use std::{
 
 use super::{
     get_attribute, get_dimension, get_row, get_row_column, read_string, replace_cell_names,
-    Dimensions, XlReader,
+    ColumnWidth, ColumnWidths, Dimensions, XlReader,
 };
 use crate::{
     datatype::DataRef,
@@ -36,6 +36,7 @@ where
     buf: Vec<u8>,
     cell_buf: Vec<u8>,
     formulas: Vec<Option<(String, FormulaMap)>>,
+    column_widths: ColumnWidths,
 }
 
 impl<'a, RS> XlsxCellReader<'a, RS>
@@ -50,6 +51,7 @@ where
     ) -> Result<Self, XlsxError> {
         let mut buf = Vec::with_capacity(1024);
         let mut dimensions = Dimensions::default();
+        let mut column_widths = ColumnWidths::new();
         let mut sh_type = None;
         'xml: loop {
             buf.clear();
@@ -67,6 +69,113 @@ where
                             }
                         }
                         return Err(XlsxError::UnexpectedNode("dimension"));
+                    }
+                    b"sheetFormatPr" => {
+                        // Parse sheet format properties for default column widths
+                        for a in e.attributes() {
+                            match a.map_err(XlsxError::XmlAttr)? {
+                                Attribute {
+                                    key: QName(b"defaultColWidth"),
+                                    value: v,
+                                } => {
+                                    if let Ok(width_str) = xml.decoder().decode(&v) {
+                                        if let Ok(width) = width_str.parse::<f64>() {
+                                            column_widths.sheet_format.default_col_width =
+                                                Some(width as u8);
+                                        }
+                                    }
+                                }
+                                Attribute {
+                                    key: QName(b"baseColWidth"),
+                                    value: v,
+                                } => {
+                                    if let Ok(width_str) = xml.decoder().decode(&v) {
+                                        if let Ok(width) = width_str.parse::<f64>() {
+                                            column_widths.sheet_format.base_col_width =
+                                                Some(width as u8);
+                                        }
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    b"cols" => {
+                        // Parse column definitions
+                        let mut inner_buf = Vec::with_capacity(512);
+                        loop {
+                            inner_buf.clear();
+                            match xml
+                                .read_event_into(&mut inner_buf)
+                                .map_err(XlsxError::Xml)?
+                            {
+                                Event::Start(ref col) | Event::Empty(ref col)
+                                    if col.local_name().as_ref() == b"col" =>
+                                {
+                                    let mut min = 1u32;
+                                    let mut max = 1u32;
+                                    let mut width = 8u8;
+                                    let mut custom_width = false;
+                                    let mut best_fit = false;
+
+                                    for a in col.attributes() {
+                                        match a.map_err(XlsxError::XmlAttr)? {
+                                            Attribute {
+                                                key: QName(b"min"),
+                                                value: v,
+                                            } => {
+                                                min = atoi_simd::parse::<u32>(&v).unwrap_or(1);
+                                            }
+                                            Attribute {
+                                                key: QName(b"max"),
+                                                value: v,
+                                            } => {
+                                                max = atoi_simd::parse::<u32>(&v).unwrap_or(1);
+                                            }
+                                            Attribute {
+                                                key: QName(b"width"),
+                                                value: v,
+                                            } => {
+                                                if let Ok(width_str) = xml.decoder().decode(&v) {
+                                                    if let Ok(w) = width_str.parse::<f64>() {
+                                                        width = w as u8;
+                                                    }
+                                                }
+                                            }
+                                            Attribute {
+                                                key: QName(b"customWidth"),
+                                                value: v,
+                                            } => {
+                                                custom_width = &*v == b"1" || &*v == b"true";
+                                            }
+                                            Attribute {
+                                                key: QName(b"bestFit"),
+                                                value: v,
+                                            } => {
+                                                best_fit = &*v == b"1" || &*v == b"true";
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+
+                                    // Excel uses 1-based column indices, convert to 0-based
+                                    if min > 0 && max > 0 {
+                                        column_widths.add_column_range(
+                                            min - 1,
+                                            max - 1,
+                                            ColumnWidth {
+                                                width,
+                                                custom_width,
+                                                best_fit,
+                                            },
+                                        );
+                                    }
+                                }
+                                Event::End(ref e) if e.local_name().as_ref() == b"cols" => break,
+                                Event::Eof => return Err(XlsxError::XmlEof("cols")),
+                                _ => {}
+                            }
+                        }
                     }
                     b"sheetData" => break,
                     typ => {
@@ -96,11 +205,17 @@ where
             buf: Vec::with_capacity(1024),
             cell_buf: Vec::with_capacity(1024),
             formulas: Vec::with_capacity(1024),
+            column_widths,
         })
     }
 
     pub fn dimensions(&self) -> Dimensions {
         self.dimensions
+    }
+
+    /// Get column widths information
+    pub fn column_widths(&self) -> &ColumnWidths {
+        &self.column_widths
     }
 
     pub fn next_cell(&mut self) -> Result<Option<Cell<DataRef<'a>>>, XlsxError> {
@@ -180,7 +295,7 @@ where
 
     pub fn next_formula(&mut self) -> Result<Option<Cell<String>>, XlsxError> {
         self.next_formula_with_formatting()
-        .map(|opt| opt.map(|(cell, _)| cell))
+            .map(|opt| opt.map(|(cell, _)| cell))
     }
 
     /// Get the next formula with its formatting information

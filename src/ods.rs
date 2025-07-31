@@ -18,7 +18,10 @@ use zip::read::{ZipArchive, ZipFile};
 use zip::result::ZipError;
 
 use crate::vba::VbaProject;
-use crate::{Data, DataType, DataWithFormatting, HeaderRow, Metadata, Range, Reader, Sheet, SheetType, SheetVisible};
+use crate::{
+    Data, DataType, DataWithFormatting, HeaderRow, Metadata, Range, Reader, Sheet, SheetType,
+    SheetVisible,
+};
 use std::marker::PhantomData;
 
 const MIMETYPE: &[u8] = b"application/vnd.oasis.opendocument.spreadsheet";
@@ -227,7 +230,11 @@ where
         };
 
         // Convert Data to DataWithFormatting (no formatting info in ODS)
-        let inner = result_sheet.inner.into_iter().map(|data| DataWithFormatting::from_data(data)).collect();
+        let inner = result_sheet
+            .inner
+            .into_iter()
+            .map(|data| DataWithFormatting::from_data(data))
+            .collect();
         Ok(Range {
             start: result_sheet.start,
             end: result_sheet.end,
@@ -239,7 +246,11 @@ where
         self.sheets
             .iter()
             .map(|(name, (range, _formula))| {
-                let inner = range.inner.iter().map(|data| DataWithFormatting::from_data(data.clone())).collect();
+                let inner = range
+                    .inner
+                    .iter()
+                    .map(|data| DataWithFormatting::from_data(data.clone()))
+                    .collect();
                 let formatted_range = Range {
                     start: range.start,
                     end: range.end,
@@ -252,14 +263,19 @@ where
 
     /// Read worksheet data in corresponding worksheet path
     fn worksheet_formula(&mut self, name: &str) -> Result<Range<DataWithFormatting>, OdsError> {
-        let formula_range = self.sheets
+        let formula_range = self
+            .sheets
             .get(name)
             .ok_or_else(|| OdsError::WorksheetNotFound(name.into()))?
             .1
             .to_owned();
-        
+
         // Convert String to DataWithFormatting (no formatting info in ODS)
-        let inner = formula_range.inner.into_iter().map(|formula| DataWithFormatting::from_data(Data::String(formula))).collect();
+        let inner = formula_range
+            .inner
+            .into_iter()
+            .map(|formula| DataWithFormatting::from_data(Data::String(formula)))
+            .collect();
         Ok(Range {
             start: formula_range.start,
             end: formula_range.end,

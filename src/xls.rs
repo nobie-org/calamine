@@ -17,8 +17,8 @@ use crate::utils::read_usize;
 use crate::utils::{push_column, read_f64, read_i16, read_i32, read_u16, read_u32};
 use crate::vba::VbaProject;
 use crate::{
-    Cell, CellErrorType, Data, DataWithFormatting, Dimensions, HeaderRow, Metadata, Range, Reader, Sheet, SheetType,
-    SheetVisible,
+    Cell, CellErrorType, Data, DataWithFormatting, Dimensions, HeaderRow, Metadata, Range, Reader,
+    Sheet, SheetType, SheetVisible,
 };
 
 #[derive(Debug)]
@@ -276,7 +276,11 @@ impl<RS: Read + Seek> Reader<RS> for Xls<RS> {
         };
 
         // Convert Data to DataWithFormatting (no formatting info in XLS)
-        let inner = result_sheet.inner.into_iter().map(|data| DataWithFormatting::from_data(data)).collect();
+        let inner = result_sheet
+            .inner
+            .into_iter()
+            .map(|data| DataWithFormatting::from_data(data))
+            .collect();
         Ok(Range {
             start: result_sheet.start,
             end: result_sheet.end,
@@ -288,7 +292,12 @@ impl<RS: Read + Seek> Reader<RS> for Xls<RS> {
         self.sheets
             .iter()
             .map(|(name, sheet)| {
-                let inner = sheet.range.inner.iter().map(|data| DataWithFormatting::from_data(data.clone())).collect();
+                let inner = sheet
+                    .range
+                    .inner
+                    .iter()
+                    .map(|data| DataWithFormatting::from_data(data.clone()))
+                    .collect();
                 let formatted_range = Range {
                     start: sheet.range.start,
                     end: sheet.range.end,
@@ -300,14 +309,19 @@ impl<RS: Read + Seek> Reader<RS> for Xls<RS> {
     }
 
     fn worksheet_formula(&mut self, name: &str) -> Result<Range<DataWithFormatting>, XlsError> {
-        let formula_range = self.sheets
+        let formula_range = self
+            .sheets
             .get(name)
             .ok_or_else(|| XlsError::WorksheetNotFound(name.into()))?
             .formula
             .clone();
-        
+
         // Convert String to DataWithFormatting (no formatting info in XLS)
-        let inner = formula_range.inner.into_iter().map(|formula| DataWithFormatting::from_data(Data::String(formula))).collect();
+        let inner = formula_range
+            .inner
+            .into_iter()
+            .map(|formula| DataWithFormatting::from_data(Data::String(formula)))
+            .collect();
         Ok(Range {
             start: formula_range.start,
             end: formula_range.end,

@@ -25,8 +25,8 @@ use crate::formats::{
 use crate::utils::{push_column, read_f64, read_i32, read_u16, read_u32, read_usize};
 use crate::vba::VbaProject;
 use crate::{
-    Cell, CellStyle, Data, DataWithFormatting, HeaderRow, Metadata, Range, Reader, ReaderRef, Sheet, SheetType,
-    SheetVisible,
+    Cell, CellStyle, Data, DataWithFormatting, HeaderRow, Metadata, Range, Reader, ReaderRef,
+    Sheet, SheetType, SheetVisible,
 };
 
 /// A Xlsb specific error
@@ -618,10 +618,8 @@ impl<RS: Read + Seek> Reader<RS> for Xlsb<RS> {
                     if matches!(cell.val, DataRef::Empty) {
                         continue;
                     }
-                    let data_with_formatting = DataWithFormatting::new(
-                        cell.val.into(),
-                        formatting.cloned(),
-                    );
+                    let data_with_formatting =
+                        DataWithFormatting::new(cell.val.into(), formatting.cloned());
                     cells.push(Cell::new(cell.pos, data_with_formatting));
                 }
             }
@@ -632,10 +630,8 @@ impl<RS: Read + Seek> Reader<RS> for Xlsb<RS> {
                         continue;
                     }
                     if cell.pos.0 >= header_row_idx {
-                        let data_with_formatting = DataWithFormatting::new(
-                            cell.val.into(),
-                            formatting.cloned(),
-                        );
+                        let data_with_formatting =
+                            DataWithFormatting::new(cell.val.into(), formatting.cloned());
                         cells.push(Cell::new(cell.pos, data_with_formatting));
                     }
                 }
@@ -666,10 +662,8 @@ impl<RS: Read + Seek> Reader<RS> for Xlsb<RS> {
         let mut cells = Vec::with_capacity(cells_reader.dimensions().len().min(1_000_000) as _);
         while let Some((cell, formatting)) = cells_reader.next_formula_with_formatting()? {
             if !cell.val.is_empty() {
-                let data_with_formatting = DataWithFormatting::new(
-                    Data::String(cell.val),
-                    formatting.cloned(),
-                );
+                let data_with_formatting =
+                    DataWithFormatting::new(Data::String(cell.val), formatting.cloned());
                 cells.push(Cell::new(cell.pos, data_with_formatting));
             }
         }
@@ -1762,8 +1756,6 @@ mod tests {
                     break;
                 }
             }
-
-
 
             assert!(has_formatting);
         }

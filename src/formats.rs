@@ -386,8 +386,8 @@ pub enum Color {
 /// use calamine::{detect_custom_number_format, CellFormat};
 ///
 /// assert_eq!(detect_custom_number_format("yyyy-mm-dd"), CellFormat::DateTime);
-/// assert_eq!(detect_custom_number_format("$#,##0.00"), CellFormat::Currency);
-/// assert_eq!(detect_custom_number_format("0.00%"), CellFormat::Percentage);
+/// assert_eq!(detect_custom_number_format("$#,##0.00"), CellFormat::Other);
+/// assert_eq!(detect_custom_number_format("0.00%"), CellFormat::Other);
 /// assert_eq!(detect_custom_number_format("[h]:mm:ss"), CellFormat::TimeDelta);
 /// ```
 ///

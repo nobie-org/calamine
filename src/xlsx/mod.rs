@@ -1,4 +1,5 @@
 mod cells_reader;
+mod column_width;
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -26,10 +27,11 @@ use crate::formats::{
 };
 use crate::vba::VbaProject;
 use crate::{
-    Cell, CellErrorType, Data, DataWithFormatting, Dimensions, HeaderRow, Metadata, Range, Reader, ReaderRef, Sheet,
-    SheetType, SheetVisible, Table,
+    Cell, CellErrorType, Data, DataWithFormatting, Dimensions, HeaderRow, Metadata, Range, Reader,
+    ReaderRef, Sheet, SheetType, SheetVisible, Table,
 };
 pub use cells_reader::XlsxCellReader;
+pub use column_width::{ColumnWidth, ColumnWidths};
 
 pub(crate) type XlReader<'a, RS> = XmlReader<BufReader<ZipFile<'a, RS>>>;
 
@@ -446,7 +448,12 @@ impl<RS: Read + Seek> Xlsx<RS> {
                         inner_buf.clear();
                         match xml.read_event_into(&mut inner_buf) {
                             Ok(Event::Start(ref e)) if e.local_name().as_ref() == b"dxf" => {
-                                let dxf = Self::parse_dxf_element(&mut xml, &mut inner_buf, &number_formats, &format_interner)?;
+                                let dxf = Self::parse_dxf_element(
+                                    &mut xml,
+                                    &mut inner_buf,
+                                    &number_formats,
+                                    &format_interner,
+                                )?;
                                 self.dxf_formats.push(dxf);
                             }
                             Ok(Event::End(ref e)) if e.local_name().as_ref() == b"dxfs" => break,
@@ -865,7 +872,11 @@ impl<RS: Read + Seek> Xlsx<RS> {
             self.conditional_formats.insert(name.to_string(), formats);
         }
 
-        Ok(self.conditional_formats.get(name).map(|v| v.as_slice()).unwrap_or(&[]))
+        Ok(self
+            .conditional_formats
+            .get(name)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[]))
     }
 
     /// Get differential formats
@@ -938,15 +949,17 @@ impl<RS: Read + Seek> Xlsx<RS> {
                             {
                                 break
                             }
-                            Ok(Event::Eof) => return Err(XlsxError::XmlEof("conditionalFormatting")),
+                            Ok(Event::Eof) => {
+                                return Err(XlsxError::XmlEof("conditionalFormatting"))
+                            }
                             Err(e) => return Err(XlsxError::Xml(e)),
                             _ => (),
                         }
                     }
 
                     if !rules.is_empty() && !ranges.is_empty() {
-                        conditional_formats.push(ConditionalFormatting { 
-                            ranges, 
+                        conditional_formats.push(ConditionalFormatting {
+                            ranges,
                             rules,
                             scope: None,
                             table: None,
@@ -1479,56 +1492,56 @@ impl<RS: Read + Seek> Xlsx<RS> {
                     // Parse attributes
                     for attr in e.attributes() {
                         match attr.map_err(XlsxError::XmlAttr)? {
-                Attribute {
-                    key: QName(b"iconSet"),
-                    value: v,
-                } => {
-                    let icon_str = xml.decoder().decode(&v)?;
-                    icon_set.icon_set = match icon_str.as_ref() {
-                        "3Arrows" => IconSetType::Arrows3,
-                        "3ArrowsGray" => IconSetType::Arrows3Gray,
-                        "4Arrows" => IconSetType::Arrows4,
-                        "4ArrowsGray" => IconSetType::Arrows4Gray,
-                        "5Arrows" => IconSetType::Arrows5,
-                        "5ArrowsGray" => IconSetType::Arrows5Gray,
-                        "3Flags" => IconSetType::Flags3,
-                        "3TrafficLights1" => IconSetType::TrafficLights3,
-                        "3TrafficLights2" => IconSetType::TrafficLights3Rimmed,
-                        "4TrafficLights" => IconSetType::TrafficLights4,
-                        "3Signs" => IconSetType::Signs3,
-                        "3Symbols" => IconSetType::Symbols3,
-                        "3Symbols2" => IconSetType::Symbols3Uncircled,
-                        "4Rating" => IconSetType::Rating4,
-                        "5Rating" => IconSetType::Rating5,
-                        "5Quarters" => IconSetType::Quarters5,
-                        "3Stars" => IconSetType::Stars3,
-                        "3Triangles" => IconSetType::Triangles3,
-                        "5Boxes" => IconSetType::Boxes5,
-                        "4RedToBlack" => IconSetType::RedToBlack4,
-                        "4RatingBars" => IconSetType::RatingBars4,
-                        "5RatingBars" => IconSetType::RatingBars5,
-                        "3ColoredArrows" => IconSetType::ColoredArrows3,
-                        "4ColoredArrows" => IconSetType::ColoredArrows4,
-                        "5ColoredArrows" => IconSetType::ColoredArrows5,
-                        "3WhiteArrows" => IconSetType::WhiteArrows3,
-                        "4WhiteArrows" => IconSetType::WhiteArrows4,
-                        "5WhiteArrows" => IconSetType::WhiteArrows5,
-                        _ => IconSetType::Arrows3,
-                    };
-                }
-                Attribute {
-                    key: QName(b"showValue"),
-                    value: v,
-                } => {
-                    icon_set.show_value = &*v != b"0" && &*v != b"false";
-                }
-                Attribute {
-                    key: QName(b"reverse"),
-                    value: v,
-                } => {
-                    icon_set.reverse = &*v == b"1" || &*v == b"true";
-                }
-                _ => (),
+                            Attribute {
+                                key: QName(b"iconSet"),
+                                value: v,
+                            } => {
+                                let icon_str = xml.decoder().decode(&v)?;
+                                icon_set.icon_set = match icon_str.as_ref() {
+                                    "3Arrows" => IconSetType::Arrows3,
+                                    "3ArrowsGray" => IconSetType::Arrows3Gray,
+                                    "4Arrows" => IconSetType::Arrows4,
+                                    "4ArrowsGray" => IconSetType::Arrows4Gray,
+                                    "5Arrows" => IconSetType::Arrows5,
+                                    "5ArrowsGray" => IconSetType::Arrows5Gray,
+                                    "3Flags" => IconSetType::Flags3,
+                                    "3TrafficLights1" => IconSetType::TrafficLights3,
+                                    "3TrafficLights2" => IconSetType::TrafficLights3Rimmed,
+                                    "4TrafficLights" => IconSetType::TrafficLights4,
+                                    "3Signs" => IconSetType::Signs3,
+                                    "3Symbols" => IconSetType::Symbols3,
+                                    "3Symbols2" => IconSetType::Symbols3Uncircled,
+                                    "4Rating" => IconSetType::Rating4,
+                                    "5Rating" => IconSetType::Rating5,
+                                    "5Quarters" => IconSetType::Quarters5,
+                                    "3Stars" => IconSetType::Stars3,
+                                    "3Triangles" => IconSetType::Triangles3,
+                                    "5Boxes" => IconSetType::Boxes5,
+                                    "4RedToBlack" => IconSetType::RedToBlack4,
+                                    "4RatingBars" => IconSetType::RatingBars4,
+                                    "5RatingBars" => IconSetType::RatingBars5,
+                                    "3ColoredArrows" => IconSetType::ColoredArrows3,
+                                    "4ColoredArrows" => IconSetType::ColoredArrows4,
+                                    "5ColoredArrows" => IconSetType::ColoredArrows5,
+                                    "3WhiteArrows" => IconSetType::WhiteArrows3,
+                                    "4WhiteArrows" => IconSetType::WhiteArrows4,
+                                    "5WhiteArrows" => IconSetType::WhiteArrows5,
+                                    _ => IconSetType::Arrows3,
+                                };
+                            }
+                            Attribute {
+                                key: QName(b"showValue"),
+                                value: v,
+                            } => {
+                                icon_set.show_value = &*v != b"0" && &*v != b"false";
+                            }
+                            Attribute {
+                                key: QName(b"reverse"),
+                                value: v,
+                            } => {
+                                icon_set.reverse = &*v == b"1" || &*v == b"true";
+                            }
+                            _ => (),
                         }
                     }
                 }
@@ -1630,13 +1643,20 @@ impl<RS: Read + Seek> Xlsx<RS> {
                             match xml.read_event_into(&mut inner_buf) {
                                 Ok(Event::Start(ref e)) => match e.local_name().as_ref() {
                                     b"name" => {
-                                        if let Some(val) = get_attribute(e.attributes(), QName(b"val"))? {
-                                            font.name = Some(xml.decoder().decode(val)?.into_owned());
+                                        if let Some(val) =
+                                            get_attribute(e.attributes(), QName(b"val"))?
+                                        {
+                                            font.name =
+                                                Some(xml.decoder().decode(val)?.into_owned());
                                         }
                                     }
                                     b"sz" => {
-                                        if let Some(val) = get_attribute(e.attributes(), QName(b"val"))? {
-                                            if let Ok(size) = xml.decoder().decode(val)?.parse::<f64>() {
+                                        if let Some(val) =
+                                            get_attribute(e.attributes(), QName(b"val"))?
+                                        {
+                                            if let Ok(size) =
+                                                xml.decoder().decode(val)?.parse::<f64>()
+                                            {
                                                 font.size = Some(size);
                                             }
                                         }
@@ -1646,14 +1666,17 @@ impl<RS: Read + Seek> Xlsx<RS> {
                                     b"u" => font.underline = Some(true),
                                     b"strike" => font.strike = Some(true),
                                     b"color" => {
-                                        font.color = Self::parse_color_from_attributes(e.attributes())?;
+                                        font.color =
+                                            Self::parse_color_from_attributes(e.attributes())?;
                                     }
                                     _ => {
                                         let mut temp_buf = Vec::new();
                                         xml.read_to_end_into(e.name(), &mut temp_buf)?;
                                     }
                                 },
-                                Ok(Event::End(ref e)) if e.local_name().as_ref() == b"font" => break,
+                                Ok(Event::End(ref e)) if e.local_name().as_ref() == b"font" => {
+                                    break
+                                }
                                 Ok(Event::Eof) => return Err(XlsxError::XmlEof("font")),
                                 Err(e) => return Err(XlsxError::Xml(e)),
                                 _ => (),
@@ -1672,14 +1695,17 @@ impl<RS: Read + Seek> Xlsx<RS> {
                         loop {
                             inner_buf.clear();
                             match xml.read_event_into(&mut inner_buf) {
-                                Ok(Event::Start(ref e)) if e.local_name().as_ref() == b"patternFill" => {
+                                Ok(Event::Start(ref e))
+                                    if e.local_name().as_ref() == b"patternFill" =>
+                                {
                                     for attr in e.attributes() {
                                         if let Attribute {
                                             key: QName(b"patternType"),
                                             value: v,
                                         } = attr.map_err(XlsxError::XmlAttr)?
                                         {
-                                            pattern_fill.pattern_type = Some(xml.decoder().decode(&v)?.into_owned());
+                                            pattern_fill.pattern_type =
+                                                Some(xml.decoder().decode(&v)?.into_owned());
                                         }
                                     }
 
@@ -1687,26 +1713,45 @@ impl<RS: Read + Seek> Xlsx<RS> {
                                     loop {
                                         pattern_buf.clear();
                                         match xml.read_event_into(&mut pattern_buf) {
-                                            Ok(Event::Start(ref e)) => match e.local_name().as_ref() {
-                                                b"fgColor" => {
-                                                    pattern_fill.fg_color = Self::parse_color_from_attributes(e.attributes())?;
+                                            Ok(Event::Start(ref e)) => {
+                                                match e.local_name().as_ref() {
+                                                    b"fgColor" => {
+                                                        pattern_fill.fg_color =
+                                                            Self::parse_color_from_attributes(
+                                                                e.attributes(),
+                                                            )?;
+                                                    }
+                                                    b"bgColor" => {
+                                                        pattern_fill.bg_color =
+                                                            Self::parse_color_from_attributes(
+                                                                e.attributes(),
+                                                            )?;
+                                                    }
+                                                    _ => {
+                                                        let mut temp_buf = Vec::new();
+                                                        xml.read_to_end_into(
+                                                            e.name(),
+                                                            &mut temp_buf,
+                                                        )?;
+                                                    }
                                                 }
-                                                b"bgColor" => {
-                                                    pattern_fill.bg_color = Self::parse_color_from_attributes(e.attributes())?;
-                                                }
-                                                _ => {
-                                                    let mut temp_buf = Vec::new();
-                                                    xml.read_to_end_into(e.name(), &mut temp_buf)?;
-                                                }
-                                            },
-                                            Ok(Event::End(ref e)) if e.local_name().as_ref() == b"patternFill" => break,
-                                            Ok(Event::Eof) => return Err(XlsxError::XmlEof("patternFill")),
+                                            }
+                                            Ok(Event::End(ref e))
+                                                if e.local_name().as_ref() == b"patternFill" =>
+                                            {
+                                                break
+                                            }
+                                            Ok(Event::Eof) => {
+                                                return Err(XlsxError::XmlEof("patternFill"))
+                                            }
                                             Err(e) => return Err(XlsxError::Xml(e)),
                                             _ => (),
                                         }
                                     }
                                 }
-                                Ok(Event::End(ref e)) if e.local_name().as_ref() == b"fill" => break,
+                                Ok(Event::End(ref e)) if e.local_name().as_ref() == b"fill" => {
+                                    break
+                                }
                                 Ok(Event::Eof) => return Err(XlsxError::XmlEof("fill")),
                                 Err(e) => return Err(XlsxError::Xml(e)),
                                 _ => (),
@@ -1767,7 +1812,8 @@ impl<RS: Read + Seek> Xlsx<RS> {
                                             value: v,
                                         } = attr.map_err(XlsxError::XmlAttr)?
                                         {
-                                            border_side.style = Some(xml.decoder().decode(&v)?.into_owned());
+                                            border_side.style =
+                                                Some(xml.decoder().decode(&v)?.into_owned());
                                         }
                                     }
 
@@ -1776,11 +1822,22 @@ impl<RS: Read + Seek> Xlsx<RS> {
                                     loop {
                                         side_buf.clear();
                                         match xml.read_event_into(&mut side_buf) {
-                                            Ok(Event::Start(ref e)) if e.local_name().as_ref() == b"color" => {
-                                                border_side.color = Self::parse_color_from_attributes(e.attributes())?;
+                                            Ok(Event::Start(ref e))
+                                                if e.local_name().as_ref() == b"color" =>
+                                            {
+                                                border_side.color =
+                                                    Self::parse_color_from_attributes(
+                                                        e.attributes(),
+                                                    )?;
                                             }
-                                            Ok(Event::End(ref e)) if e.local_name() == side_name => break,
-                                            Ok(Event::Eof) => return Err(XlsxError::XmlEof("border side")),
+                                            Ok(Event::End(ref e))
+                                                if e.local_name() == side_name =>
+                                            {
+                                                break
+                                            }
+                                            Ok(Event::Eof) => {
+                                                return Err(XlsxError::XmlEof("border side"))
+                                            }
                                             Err(e) => return Err(XlsxError::Xml(e)),
                                             _ => (),
                                         }
@@ -1788,7 +1845,9 @@ impl<RS: Read + Seek> Xlsx<RS> {
 
                                     *side = Some(border_side);
                                 }
-                                Ok(Event::End(ref e)) if e.local_name().as_ref() == b"border" => break,
+                                Ok(Event::End(ref e)) if e.local_name().as_ref() == b"border" => {
+                                    break
+                                }
                                 Ok(Event::Eof) => return Err(XlsxError::XmlEof("border")),
                                 Err(e) => return Err(XlsxError::Xml(e)),
                                 _ => (),
@@ -1808,7 +1867,7 @@ impl<RS: Read + Seek> Xlsx<RS> {
                             }
                         }
                         if !format_code.is_empty() {
-                            dxf.number_format = Some(DifferentialNumberFormat { 
+                            dxf.number_format = Some(DifferentialNumberFormat {
                                 format_code,
                                 num_fmt_id: None,
                             });
@@ -1822,13 +1881,15 @@ impl<RS: Read + Seek> Xlsx<RS> {
                                     key: QName(b"horizontal"),
                                     value: v,
                                 } => {
-                                    alignment.horizontal = Some(xml.decoder().decode(&v)?.into_owned());
+                                    alignment.horizontal =
+                                        Some(xml.decoder().decode(&v)?.into_owned());
                                 }
                                 Attribute {
                                     key: QName(b"vertical"),
                                     value: v,
                                 } => {
-                                    alignment.vertical = Some(xml.decoder().decode(&v)?.into_owned());
+                                    alignment.vertical =
+                                        Some(xml.decoder().decode(&v)?.into_owned());
                                 }
                                 Attribute {
                                     key: QName(b"wrapText"),
@@ -2359,7 +2420,10 @@ impl<RS: Read + Seek> Xlsx<RS> {
 
     /// Get the table by name (owned)
     // TODO: If retrieving multiple tables from a single sheet, get tables by sheet will be more efficient
-    pub fn table_by_name(&mut self, table_name: &str) -> Result<Table<DataWithFormatting>, XlsxError> {
+    pub fn table_by_name(
+        &mut self,
+        table_name: &str,
+    ) -> Result<Table<DataWithFormatting>, XlsxError> {
         let TableMetadata {
             name,
             sheet_name,
@@ -2458,6 +2522,12 @@ impl<RS: Read + Seek> Xlsx<RS> {
         let strings = &self.strings;
         let formats = &self.styles;
         XlsxCellReader::new(xml, strings, formats, is_1904)
+    }
+
+    /// Get column widths for a worksheet
+    pub fn worksheet_column_widths(&mut self, name: &str) -> Result<ColumnWidths, XlsxError> {
+        let cell_reader = self.worksheet_cells_reader(name)?;
+        Ok(cell_reader.column_widths().clone())
     }
 }
 
@@ -2583,10 +2653,8 @@ impl<RS: Read + Seek> Reader<RS> for Xlsx<RS> {
                     if matches!(cell.val, DataRef::Empty) {
                         continue;
                     }
-                    let data_with_formatting = DataWithFormatting::new(
-                        cell.val.into(),
-                        formatting.cloned(),
-                    );
+                    let data_with_formatting =
+                        DataWithFormatting::new(cell.val.into(), formatting.cloned());
                     cells.push(Cell::new(cell.pos, data_with_formatting));
                 }
             }
@@ -2597,10 +2665,8 @@ impl<RS: Read + Seek> Reader<RS> for Xlsx<RS> {
                         continue;
                     }
                     if cell.pos.0 >= header_row_idx {
-                        let data_with_formatting = DataWithFormatting::new(
-                            cell.val.into(),
-                            formatting.cloned(),
-                        );
+                        let data_with_formatting =
+                            DataWithFormatting::new(cell.val.into(), formatting.cloned());
                         cells.push(Cell::new(cell.pos, data_with_formatting));
                     }
                 }
@@ -2641,10 +2707,8 @@ impl<RS: Read + Seek> Reader<RS> for Xlsx<RS> {
         }
         while let Some((cell, formatting)) = cell_reader.next_formula_with_formatting()? {
             if !cell.val.is_empty() {
-                let data_with_formatting = DataWithFormatting::new(
-                    Data::String(cell.val),
-                    formatting.cloned(),
-                );
+                let data_with_formatting =
+                    DataWithFormatting::new(Data::String(cell.val), formatting.cloned());
                 cells.push(Cell::new(cell.pos, data_with_formatting));
             }
         }
