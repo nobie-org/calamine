@@ -2909,3 +2909,65 @@ fn test_column_width_parsing() {
     // The new API returns raw values from the file
     // Testing is done within the library's unit tests
 }
+
+#[test]
+fn test_calc_chain() {
+    let mut excel: Xlsx<_> = wb("chain.xlsx");
+
+    let formulas = excel.worksheet_formula("Sheet1").unwrap();
+
+    // Expect everything except E3 to be a formula
+
+    let outlier = (2, 3);
+
+    let first_col = 4; // E
+    let last_col = 15; // P
+    let first_row = 2; // 3
+    let last_row = 22624;
+
+    let first_cell = formulas.get_value(outlier);
+    assert!(
+        first_cell.is_some(),
+        "Cell at ({}, {}) should be a formula",
+        outlier.0,
+        outlier.1
+    );
+
+    assert_eq!(first_cell.unwrap().as_str(), "P3");
+
+    type StdString = ::std::string::String;
+    fn get_col_letter(col: u32) -> StdString {
+        let mut col_letter = StdString::new();
+        let mut col = col;
+        while col > 0 {
+            col_letter.push((b'A' + (col % 26) as u8) as char);
+            col /= 26;
+        }
+        col_letter
+    }
+
+    for row in first_row..last_row {
+        for col in first_col..last_col {
+            let is_first_row = row == first_row;
+
+            if row == first_row && col == first_col {
+                continue;
+            } else {
+                let cell = formulas.get_value((row, col));
+                if is_first_row {
+                    let prev_col = col - 1;
+                    let prev_col_letter = get_col_letter(prev_col);
+                    let excel_last_row = last_row + 1;
+                    let formula = format!("{prev_col_letter}{excel_last_row}");
+                    assert_eq!(cell.unwrap().as_str(), &formula);
+                } else {
+                    let excel_prev_row = row;
+                    let col_letter = get_col_letter(col);
+                    let formula = format!("{col_letter}{excel_prev_row}+1");
+                    assert_eq!(cell.unwrap().as_str(), &formula);
+                }
+            }
+        }
+    }
+
+}

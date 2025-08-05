@@ -402,27 +402,14 @@ where
                                         Some(res) => {
                                             // orignal reference formula
                                             let reference = get_dimension(res)?;
-                                            if reference.start.0 != reference.end.0 {
-                                                for i in 0..=(reference.end.0 - reference.start.0) {
+                                            // build offset map for every cell in the shared-formula rectangle
+                                            for r in reference.start.0..=reference.end.0 {
+                                                for c in reference.start.1..=reference.end.1 {
                                                     offset_map.insert(
-                                                        (reference.start.0 + i, reference.start.1),
+                                                        (r, c),
                                                         (
-                                                            (reference.start.0 as i64
-                                                                - pos.0 as i64
-                                                                + i as i64),
-                                                            0,
-                                                        ),
-                                                    );
-                                                }
-                                            } else if reference.start.1 != reference.end.1 {
-                                                for i in 0..=(reference.end.1 - reference.start.1) {
-                                                    offset_map.insert(
-                                                        (reference.start.0, reference.start.1 + i),
-                                                        (
-                                                            0,
-                                                            (reference.start.1 as i64
-                                                                - pos.1 as i64
-                                                                + i as i64),
+                                                            r as i64 - pos.0 as i64,
+                                                            c as i64 - pos.1 as i64,
                                                         ),
                                                     );
                                                 }
