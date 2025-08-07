@@ -2655,6 +2655,10 @@ impl<RS: Read + Seek> Reader<RS> for Xlsx<RS> {
                     }
                     let data_with_formatting =
                         DataWithFormatting::new(cell.val.into(), formatting.cloned());
+                    let mut data_with_formatting = data_with_formatting;
+                    if !cell_reader.last_cell_had_formula() && cell_reader.is_in_spill(cell.pos) {
+                        data_with_formatting.is_spilled = true;
+                    }
                     cells.push(Cell::new(cell.pos, data_with_formatting));
                 }
             }
@@ -2667,6 +2671,10 @@ impl<RS: Read + Seek> Reader<RS> for Xlsx<RS> {
                     if cell.pos.0 >= header_row_idx {
                         let data_with_formatting =
                             DataWithFormatting::new(cell.val.into(), formatting.cloned());
+                        let mut data_with_formatting = data_with_formatting;
+                        if !cell_reader.last_cell_had_formula() && cell_reader.is_in_spill(cell.pos) {
+                            data_with_formatting.is_spilled = true;
+                        }
                         cells.push(Cell::new(cell.pos, data_with_formatting));
                     }
                 }

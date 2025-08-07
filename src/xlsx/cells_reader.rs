@@ -37,6 +37,10 @@ where
     cell_buf: Vec<u8>,
     formulas: Vec<Option<(String, FormulaMap)>>,
     column_widths: ColumnWidths,
+    // Spill tracking for dynamic array sources: ranges defined by <f t="array" ref="...">
+    spill_sources: Vec<Dimensions>,
+    // Whether the last returned cell had its own <f> formula element
+    last_cell_had_formula: bool,
 }
 
 impl<'a, RS> XlsxCellReader<'a, RS>
@@ -234,7 +238,22 @@ where
             cell_buf: Vec::with_capacity(1024),
             formulas: Vec::with_capacity(1024),
             column_widths,
+            spill_sources: Vec::with_capacity(32),
+            last_cell_had_formula: false,
         })
+    }
+
+    /// Check if an absolute position is within any recorded spill source range
+    pub fn is_in_spill(&self, pos: (u32, u32)) -> bool {
+        let (row, col) = pos;
+        self.spill_sources
+            .iter()
+            .any(|d| d.contains(row, col))
+    }
+
+    /// Whether the last returned cell had its own formula (<f> element)
+    pub fn last_cell_had_formula(&self) -> bool {
+        self.last_cell_had_formula
     }
 
     pub fn dimensions(&self) -> Dimensions {
@@ -247,7 +266,8 @@ where
     }
 
     pub fn next_cell(&mut self) -> Result<Option<Cell<DataRef<'a>>>, XlsxError> {
-        self.next_cell_with_formatting()
+        self
+            .next_cell_with_formatting()
             .map(|opt| opt.map(|(cell, _)| cell))
     }
 
@@ -281,11 +301,25 @@ where
                         (self.row_index, self.col_index)
                     };
                     let (mut value, mut cell_formatting) = (DataRef::Empty, None);
+                    let mut had_formula = false;
 
                     loop {
                         self.cell_buf.clear();
                         match self.xml.read_event_into(&mut self.cell_buf) {
                             Ok(Event::Start(ref e)) => {
+                                if e.local_name().as_ref() == b"f" {
+                                    had_formula = true;
+                                    if let Ok(Some(t)) = get_attribute(e.attributes(), QName(b"t")) {
+                                        if t == b"array" {
+                                            if let Ok(Some(r)) =
+                                                get_attribute(e.attributes(), QName(b"ref"))
+                                            {
+                                                let dim = get_dimension(r)?;
+                                                self.spill_sources.push(dim);
+                                            }
+                                        }
+                                    }
+                                }
                                 let (val, formatting) = read_value_with_formatting(
                                     self.strings,
                                     self.formats,
@@ -297,6 +331,20 @@ where
                                 value = val;
                                 cell_formatting = formatting;
                             }
+                            Ok(Event::Empty(ref e)) if e.local_name().as_ref() == b"f" => {
+                                // Catch inline empty <f .../> tags too
+                                had_formula = true;
+                                if let Ok(Some(t)) = get_attribute(e.attributes(), QName(b"t")) {
+                                    if t == b"array" {
+                                        if let Ok(Some(r)) =
+                                            get_attribute(e.attributes(), QName(b"ref"))
+                                        {
+                                            let dim = get_dimension(r)?;
+                                            self.spill_sources.push(dim);
+                                        }
+                                    }
+                                }
+                            }
                             Ok(Event::End(ref e)) if e.local_name().as_ref() == b"c" => break,
                             Ok(Event::Eof) => return Err(XlsxError::XmlEof("c")),
                             Err(e) => return Err(XlsxError::Xml(e)),
@@ -304,6 +352,7 @@ where
                         }
                     }
                     self.col_index += 1;
+                    self.last_cell_had_formula = had_formula;
                     return Ok(Some((Cell::new(pos, value), cell_formatting)));
                 }
                 Ok(Event::End(ref e)) if e.local_name().as_ref() == b"sheetData" => {
@@ -402,6 +451,14 @@ where
                                         Some(res) => {
                                             // orignal reference formula
                                             let reference = get_dimension(res)?;
+                                            // dynamic arrays also use t="array" with a ref; capture those as sources
+                                            if let Ok(Some(t)) =
+                                                get_attribute(e.attributes(), QName(b"t"))
+                                            {
+                                                if t == b"array" {
+                                                    self.spill_sources.push(reference);
+                                                }
+                                            }
                                             // build offset map for every cell in the shared-formula rectangle
                                             for r in reference.start.0..=reference.end.0 {
                                                 for c in reference.start.1..=reference.end.1 {
@@ -432,6 +489,17 @@ where
                                                     value = Some(replace_cell_names(f, *offset)?);
                                                 }
                                             }
+                                        }
+                                    }
+                                }
+                                // capture non-shared array formulas with ref
+                                if let Ok(Some(t)) = get_attribute(e.attributes(), QName(b"t")) {
+                                    if t == b"array" {
+                                        if let Ok(Some(r)) =
+                                            get_attribute(e.attributes(), QName(b"ref"))
+                                        {
+                                            let reference = get_dimension(r)?;
+                                            self.spill_sources.push(reference);
                                         }
                                     }
                                 }

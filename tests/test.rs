@@ -2,7 +2,7 @@ use calamine::Data::{Bool, DateTime, DateTimeIso, DurationIso, Empty, Error, Flo
 use calamine::{
     open_workbook, open_workbook_auto, CellFormat, Color, ColumnDefinition, ColumnWidths, DataRef,
     DataWithFormatting, Dimensions, ExcelDateTime, ExcelDateTimeType, HeaderRow, Ods, PatternType,
-    Range, Reader, ReaderRef, Sheet, SheetType, SheetVisible, Xls, Xlsb, Xlsx,
+    Range, Reader, ReaderRef, Sheet, SheetType, SheetVisible, Xls, Xlsb, Xlsx, DataType,
 };
 use calamine::{CellErrorType::*, Data};
 use rstest::rstest;

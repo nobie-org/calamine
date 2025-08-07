@@ -151,12 +151,18 @@ pub struct DataWithFormatting {
     pub data: Data,
     /// The cell formatting information
     pub formatting: Option<CellStyle>,
+    /// True if this cell's value was produced by a spilled dynamic/array formula from another cell
+    pub is_spilled: bool,
 }
 
 impl DataWithFormatting {
     /// Creates a new DataWithFormatting with the given data and formatting
     pub fn new(data: Data, formatting: Option<CellStyle>) -> Self {
-        Self { data, formatting }
+        Self {
+            data,
+            formatting,
+            is_spilled: false,
+        }
     }
 
     /// Creates a new DataWithFormatting with data and no formatting
@@ -164,6 +170,7 @@ impl DataWithFormatting {
         Self {
             data,
             formatting: None,
+            is_spilled: false,
         }
     }
 
@@ -196,6 +203,7 @@ impl Default for DataWithFormatting {
         Self {
             data: Data::Empty,
             formatting: None,
+            is_spilled: false,
         }
     }
 }
@@ -208,6 +216,9 @@ impl PartialEq<DataWithFormatting> for DataWithFormatting {
         if matches!(self.data, Data::Empty) && matches!(other.data, Data::Empty) {
             return true;
         }
+        // Note: `is_spilled` is intentionally not part of equality semantics
+        // to preserve previous behavior and because it is metadata about origin,
+        // not the cell's value or formatting.
         self.data == other.data && self.formatting == other.formatting
     }
 }
@@ -217,6 +228,96 @@ impl CellType for DataWithFormatting {}
 impl fmt::Display for DataWithFormatting {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.data)
+    }
+}
+
+// Delegate DataType behavior to the inner Data so existing tests and helpers continue to work
+impl crate::datatype::DataType for DataWithFormatting {
+    #[inline]
+    fn is_empty(&self) -> bool {
+        crate::datatype::DataType::is_empty(&self.data)
+    }
+    #[inline]
+    fn is_int(&self) -> bool {
+        crate::datatype::DataType::is_int(&self.data)
+    }
+    #[inline]
+    fn is_float(&self) -> bool {
+        crate::datatype::DataType::is_float(&self.data)
+    }
+    #[inline]
+    fn is_bool(&self) -> bool {
+        crate::datatype::DataType::is_bool(&self.data)
+    }
+    #[inline]
+    fn is_string(&self) -> bool {
+        crate::datatype::DataType::is_string(&self.data)
+    }
+    #[inline]
+    fn is_error(&self) -> bool {
+        crate::datatype::DataType::is_error(&self.data)
+    }
+    #[inline]
+    fn get_int(&self) -> Option<i64> {
+        crate::datatype::DataType::get_int(&self.data)
+    }
+    #[inline]
+    fn get_float(&self) -> Option<f64> {
+        crate::datatype::DataType::get_float(&self.data)
+    }
+    #[inline]
+    fn get_bool(&self) -> Option<bool> {
+        crate::datatype::DataType::get_bool(&self.data)
+    }
+    #[inline]
+    fn get_string(&self) -> Option<&str> {
+        crate::datatype::DataType::get_string(&self.data)
+    }
+    #[inline]
+    fn get_error(&self) -> Option<&crate::CellErrorType> {
+        crate::datatype::DataType::get_error(&self.data)
+    }
+    #[cfg(feature = "dates")]
+    #[inline]
+    fn is_duration_iso(&self) -> bool {
+        crate::datatype::DataType::is_duration_iso(&self.data)
+    }
+    #[cfg(feature = "dates")]
+    #[inline]
+    fn is_datetime(&self) -> bool {
+        crate::datatype::DataType::is_datetime(&self.data)
+    }
+    #[cfg(feature = "dates")]
+    #[inline]
+    fn is_datetime_iso(&self) -> bool {
+        crate::datatype::DataType::is_datetime_iso(&self.data)
+    }
+    #[cfg(feature = "dates")]
+    #[inline]
+    fn get_datetime(&self) -> Option<crate::datatype::ExcelDateTime> {
+        crate::datatype::DataType::get_datetime(&self.data)
+    }
+    #[cfg(feature = "dates")]
+    #[inline]
+    fn get_datetime_iso(&self) -> Option<&str> {
+        crate::datatype::DataType::get_datetime_iso(&self.data)
+    }
+    #[cfg(feature = "dates")]
+    #[inline]
+    fn get_duration_iso(&self) -> Option<&str> {
+        crate::datatype::DataType::get_duration_iso(&self.data)
+    }
+    #[inline]
+    fn as_string(&self) -> Option<String> {
+        crate::datatype::DataType::as_string(&self.data)
+    }
+    #[inline]
+    fn as_i64(&self) -> Option<i64> {
+        crate::datatype::DataType::as_i64(&self.data)
+    }
+    #[inline]
+    fn as_f64(&self) -> Option<f64> {
+        crate::datatype::DataType::as_f64(&self.data)
     }
 }
 
