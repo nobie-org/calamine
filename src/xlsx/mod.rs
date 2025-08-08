@@ -298,10 +298,14 @@ impl<RS: Read + Seek> Xlsx<RS> {
                                         } => {
                                             id = atoi_simd::parse::<u32>(&v).unwrap_or(0);
                                         }
-                                        Attribute {
+                                        a @ Attribute {
                                             key: QName(b"formatCode"),
-                                            value: v,
-                                        } => format = xml.decoder().decode(&v)?.into_owned(),
+                                            value: _,
+                                        } => {
+                                            format = a
+                                                .decode_and_unescape_value(xml.decoder())?
+                                                .into_owned()
+                                        }
                                         _ => (),
                                     }
                                 }
@@ -1256,7 +1260,7 @@ impl<RS: Read + Seek> Xlsx<RS> {
                 Ok(Event::Start(ref e)) => match e.local_name().as_ref() {
                     b"formula" => {
                         if let Ok(Event::Text(ref t)) = xml.read_event_into(buf) {
-                            let formula_text = xml.decoder().decode(t)?.into_owned();
+                            let formula_text = t.unescape()?.into_owned();
                             formulas.push(formula_text);
                         }
                     }
@@ -2672,7 +2676,8 @@ impl<RS: Read + Seek> Reader<RS> for Xlsx<RS> {
                         let data_with_formatting =
                             DataWithFormatting::new(cell.val.into(), formatting.cloned());
                         let mut data_with_formatting = data_with_formatting;
-                        if !cell_reader.last_cell_had_formula() && cell_reader.is_in_spill(cell.pos) {
+                        if !cell_reader.last_cell_had_formula() && cell_reader.is_in_spill(cell.pos)
+                        {
                             data_with_formatting.is_spilled = true;
                         }
                         cells.push(Cell::new(cell.pos, data_with_formatting));
