@@ -1,8 +1,8 @@
 use calamine::Data::{Bool, DateTime, DateTimeIso, DurationIso, Empty, Error, Float, Int, String};
 use calamine::{
     open_workbook, open_workbook_auto, CellFormat, Color, ColumnDefinition, ColumnWidths, DataRef,
-    DataWithFormatting, Dimensions, ExcelDateTime, ExcelDateTimeType, HeaderRow, Ods, PatternType,
-    Range, Reader, ReaderRef, Sheet, SheetType, SheetVisible, Xls, Xlsb, Xlsx, DataType,
+    DataType, DataWithFormatting, Dimensions, ExcelDateTime, ExcelDateTimeType, HeaderRow, Ods,
+    PatternType, Range, Reader, ReaderRef, Sheet, SheetType, SheetVisible, Xls, Xlsb, Xlsx,
 };
 use calamine::{CellErrorType::*, Data};
 use rstest::rstest;
@@ -411,8 +411,8 @@ fn test_comprehensive_formatting_format_xlsx() {
     assert_eq!(format_5.number_format, CellFormat::Other);
     assert_eq!(
         format_5.format_string.as_ref().map(|s| s.as_ref()),
-        Some("&quot;$&quot;#,##0.00"),
-        "Format 5 should have format string"
+        Some("\"$\"#,##0.00"),
+        "Format 5 should have format string with real quotes"
     );
 
     // Test Format 6: Basic Arial format with theme color
@@ -2712,7 +2712,7 @@ fn test_escape_quote_xlsb() {
 #[test]
 fn test_advanced_formatting_features_format_xlsx() {
     let excel: Xlsx<_> = wb("format.xlsx");
-    let formats = excel.get_all_cell_formats();
+    let formats = excel.get_all_cell_formats().to_vec();
 
     // Test number format variations
     let percentage_formats: Vec<_> = formats
@@ -2846,7 +2846,7 @@ fn test_column_widths() {
 
     // Test that we got some column definitions
     // The actual parsing of widths is now tested in the column_width module tests
-    
+
     // The new API returns raw values from the file
     // Testing is done within the library's unit tests
 }
@@ -2901,11 +2901,11 @@ fn test_column_width_parsing() {
     let defs_col1 = test_widths.find_definitions_for_column(1);
     assert_eq!(defs_col1.len(), 1, "Should find 1 definition for column 1");
     assert_eq!(defs_col1[0].width.unwrap(), 15.0);
-    
+
     let defs_col4 = test_widths.find_definitions_for_column(4);
     assert_eq!(defs_col4.len(), 1, "Should find 1 definition for column 4");
     assert_eq!(defs_col4[0].width.unwrap(), 20.0);
-    
+
     // The new API returns raw values from the file
     // Testing is done within the library's unit tests
 }
@@ -2969,5 +2969,23 @@ fn test_calc_chain() {
             }
         }
     }
+}
 
+#[test]
+fn test_numfmt_quoted_dollar_and_euro() {
+    let mut excel: Xlsx<_> = wb("quote_number_format.xlsx");
+
+    let formats: Vec<_> = excel.get_all_cell_formats().to_vec();
+    let got: Vec<Option<&str>> = formats.iter().map(|f| f.format_string.as_deref()).collect();
+    let expected: Vec<Option<&str>> = vec![None, Some("\"$>\"0.000")];
+    assert_eq!(got, expected);
+
+    let range = excel.worksheet_range("Sheet1").unwrap();
+    let a1_fmt = range.get_value((0, 0)).unwrap().get_formatting();
+    let a1_fmt = a1_fmt.as_ref().expect("A1 should have formatting");
+    let a1_idx = formats
+        .iter()
+        .position(|f| f == a1_fmt)
+        .expect("A1 formatting must match an existing format entry");
+    assert_eq!(a1_idx, 1);
 }
