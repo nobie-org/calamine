@@ -287,16 +287,6 @@ where
     fn pictures(&self) -> Option<Vec<(String, Vec<u8>)>> {
         self.pictures.to_owned()
     }
-
-    fn worksheet_column_widths(
-        &mut self,
-        _name: &str,
-    ) -> Result<crate::xlsx::column_width::ColumnWidths, OdsError> {
-        Err(OdsError::from(std::io::Error::new(
-            std::io::ErrorKind::Unsupported,
-            "worksheet_column_widths is only supported for XLSX",
-        )))
-    }
 }
 
 struct Content {

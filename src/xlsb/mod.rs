@@ -690,16 +690,6 @@ impl<RS: Read + Seek> Reader<RS> for Xlsb<RS> {
     fn pictures(&self) -> Option<Vec<(String, Vec<u8>)>> {
         self.pictures.to_owned()
     }
-
-    fn worksheet_column_widths(
-        &mut self,
-        _name: &str,
-    ) -> Result<crate::xlsx::column_width::ColumnWidths, XlsbError> {
-        Err(XlsbError::from(std::io::Error::new(
-            std::io::ErrorKind::Unsupported,
-            "worksheet_column_widths is only supported for XLSX",
-        )))
-    }
 }
 
 impl<RS: Read + Seek> ReaderRef<RS> for Xlsb<RS> {
