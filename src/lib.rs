@@ -102,7 +102,7 @@ pub use crate::formats::{
 pub use crate::ods::{Ods, OdsError};
 pub use crate::xls::{Xls, XlsError, XlsOptions};
 pub use crate::xlsb::{Xlsb, XlsbError};
-pub use crate::xlsx::{ColumnDefinition, ColumnWidths, SheetFormatProperties, Xlsx, XlsxError};
+pub use crate::xlsx::{ColumnDefinition, ColumnWidths, RowDefinition, RowDefinitions, SheetFormatProperties, Xlsx, XlsxError};
 
 use crate::vba::VbaProject;
 
@@ -568,6 +568,17 @@ where
         Err(Self::Error::from(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
             "worksheet_column_widths is unsupported for this format",
+        )))
+    }
+
+    /// Get row heights and raw row definitions for a worksheet
+    ///
+    /// Default implementation returns an Unsupported error for formats
+    /// that do not provide this information. Supported for XLSX.
+    fn worksheet_row_definitions(&mut self, _name: &str) -> Result<RowDefinitions, Self::Error> {
+        Err(Self::Error::from(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "worksheet_row_definitions is unsupported for this format",
         )))
     }
 }

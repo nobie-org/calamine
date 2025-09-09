@@ -10,7 +10,7 @@ use std::{
 
 use super::{
     get_attribute, get_dimension, get_row, get_row_column, read_string, replace_cell_names,
-    ColumnDefinition, ColumnWidths, Dimensions, XlReader,
+    ColumnDefinition, ColumnWidths, Dimensions, RowDefinition, RowDefinitions, XlReader,
 };
 use crate::{
     datatype::DataRef,
@@ -37,6 +37,7 @@ where
     cell_buf: Vec<u8>,
     formulas: Vec<Option<(String, FormulaMap)>>,
     column_widths: ColumnWidths,
+    row_definitions: RowDefinitions,
     // Spill tracking for dynamic array sources: ranges defined by <f t="array" ref="...">
     spill_sources: Vec<Dimensions>,
     // Whether the last returned cell had its own <f> formula element
@@ -56,6 +57,7 @@ where
         let mut buf = Vec::with_capacity(1024);
         let mut dimensions = Dimensions::default();
         let mut column_widths = ColumnWidths::new();
+        let mut row_definitions = RowDefinitions::new();
         let mut sh_type = None;
         'xml: loop {
             buf.clear();
@@ -85,6 +87,7 @@ where
                                     if let Ok(width_str) = xml.decoder().decode(&v) {
                                         if let Ok(width) = width_str.parse::<f64>() {
                                             column_widths.sheet_format.default_col_width = Some(width);
+                                            row_definitions.sheet_format.default_col_width = Some(width);
                                         }
                                     }
                                 }
@@ -95,6 +98,7 @@ where
                                     if let Ok(width_str) = xml.decoder().decode(&v) {
                                         if let Ok(width) = width_str.parse::<u8>() {
                                             column_widths.sheet_format.base_col_width = Some(width);
+                                            row_definitions.sheet_format.base_col_width = Some(width);
                                         }
                                     }
                                 }
@@ -105,6 +109,7 @@ where
                                     if let Ok(height_str) = xml.decoder().decode(&v) {
                                         if let Ok(height) = height_str.parse::<f64>() {
                                             column_widths.sheet_format.default_row_height = Some(height);
+                                            row_definitions.sheet_format.default_row_height = Some(height);
                                         }
                                     }
                                 }
@@ -238,6 +243,7 @@ where
             cell_buf: Vec::with_capacity(1024),
             formulas: Vec::with_capacity(1024),
             column_widths,
+            row_definitions,
             spill_sources: Vec::with_capacity(32),
             last_cell_had_formula: false,
         })
@@ -265,6 +271,11 @@ where
         &self.column_widths
     }
 
+    /// Get row definitions information
+    pub fn row_definitions(&self) -> &RowDefinitions {
+        &self.row_definitions
+    }
+
     pub fn next_cell(&mut self) -> Result<Option<Cell<DataRef<'a>>>, XlsxError> {
         self
             .next_cell_with_formatting()
@@ -285,6 +296,86 @@ where
                     if let Some(range) = attribute {
                         let row = get_row(range)?;
                         self.row_index = row;
+                        
+                        // Parse row definition attributes
+                        let mut row_def = RowDefinition {
+                            r: row,
+                            height: None,
+                            style: None,
+                            custom_height: None,
+                            hidden: None,
+                            outline_level: None,
+                            collapsed: None,
+                            thick_top: None,
+                            thick_bot: None,
+                        };
+                        
+                        // Parse row attributes
+                        for a in row_element.attributes() {
+                            match a.map_err(XlsxError::XmlAttr)? {
+                                Attribute {
+                                    key: QName(b"ht"),
+                                    value: v,
+                                } => {
+                                    if let Ok(height_str) = self.xml.decoder().decode(&v) {
+                                        if let Ok(height) = height_str.parse::<f64>() {
+                                            row_def.height = Some(height);
+                                        }
+                                    }
+                                }
+                                Attribute {
+                                    key: QName(b"s"),
+                                    value: v,
+                                } => {
+                                    row_def.style = atoi_simd::parse::<u32>(&v).ok();
+                                }
+                                Attribute {
+                                    key: QName(b"customHeight"),
+                                    value: v,
+                                } => {
+                                    row_def.custom_height = Some(&*v == b"1" || &*v == b"true");
+                                }
+                                Attribute {
+                                    key: QName(b"hidden"),
+                                    value: v,
+                                } => {
+                                    row_def.hidden = Some(&*v == b"1" || &*v == b"true");
+                                }
+                                Attribute {
+                                    key: QName(b"outlineLevel"),
+                                    value: v,
+                                } => {
+                                    row_def.outline_level = atoi_simd::parse::<u8>(&v).ok();
+                                }
+                                Attribute {
+                                    key: QName(b"collapsed"),
+                                    value: v,
+                                } => {
+                                    row_def.collapsed = Some(&*v == b"1" || &*v == b"true");
+                                }
+                                Attribute {
+                                    key: QName(b"thickTop"),
+                                    value: v,
+                                } => {
+                                    row_def.thick_top = Some(&*v == b"1" || &*v == b"true");
+                                }
+                                Attribute {
+                                    key: QName(b"thickBot"),
+                                    value: v,
+                                } => {
+                                    row_def.thick_bot = Some(&*v == b"1" || &*v == b"true");
+                                }
+                                _ => {}
+                            }
+                        }
+                        
+                        // Store row definition if it has any meaningful information
+                        if row_def.height.is_some() || row_def.style.is_some() || 
+                           row_def.custom_height == Some(true) || row_def.hidden == Some(true) ||
+                           row_def.outline_level.is_some() || row_def.collapsed == Some(true) ||
+                           row_def.thick_top == Some(true) || row_def.thick_bot == Some(true) {
+                            self.row_definitions.add_row_definition(row_def);
+                        }
                     }
                 }
                 Ok(Event::End(ref row_element)) if row_element.local_name().as_ref() == b"row" => {

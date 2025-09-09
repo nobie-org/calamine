@@ -31,7 +31,7 @@ use crate::{
     ReaderRef, Sheet, SheetType, SheetVisible, Table,
 };
 pub use cells_reader::XlsxCellReader;
-pub use column_width::{ColumnDefinition, ColumnWidths, SheetFormatProperties};
+pub use column_width::{ColumnDefinition, ColumnWidths, RowDefinition, RowDefinitions, SheetFormatProperties};
 
 pub(crate) type XlReader<'a, RS> = XmlReader<BufReader<ZipFile<'a, RS>>>;
 
@@ -2533,6 +2533,16 @@ impl<RS: Read + Seek> Xlsx<RS> {
         let cell_reader = self.worksheet_cells_reader(name)?;
         Ok(cell_reader.column_widths().clone())
     }
+
+    /// Get row definitions for a worksheet
+    pub fn worksheet_row_definitions(&mut self, name: &str) -> Result<RowDefinitions, XlsxError> {
+        let mut cell_reader = self.worksheet_cells_reader(name)?;
+        // TODO - cleanup
+        while let Some((_cell, _)) = cell_reader.next_cell_with_formatting()? {
+            continue;
+        }
+        Ok(cell_reader.row_definitions().clone())
+    }
 }
 
 struct TableMetadata {
@@ -2750,6 +2760,10 @@ impl<RS: Read + Seek> Reader<RS> for Xlsx<RS> {
 
     fn worksheet_column_widths(&mut self, name: &str) -> Result<ColumnWidths, XlsxError> {
         Xlsx::worksheet_column_widths(self, name)
+    }
+
+    fn worksheet_row_definitions(&mut self, name: &str) -> Result<RowDefinitions, XlsxError> {
+        Xlsx::worksheet_row_definitions(self, name)
     }
 }
 
