@@ -2747,6 +2747,10 @@ impl<RS: Read + Seek> Reader<RS> for Xlsx<RS> {
     fn pictures(&self) -> Option<Vec<(String, Vec<u8>)>> {
         self.pictures.to_owned()
     }
+
+    fn worksheet_column_widths(&mut self, name: &str) -> Result<ColumnWidths, XlsxError> {
+        Xlsx::worksheet_column_widths(self, name)
+    }
 }
 
 impl<RS: Read + Seek> ReaderRef<RS> for Xlsx<RS> {
