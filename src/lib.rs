@@ -561,15 +561,7 @@ where
     fn pictures(&self) -> Option<Vec<(String, Vec<u8>)>>;
 
     /// Get column widths and raw column definitions for a worksheet
-    ///
-    /// Default implementation returns an Unsupported error for formats
-    /// that do not provide this information. Supported for XLSX.
-    fn worksheet_column_widths(&mut self, _name: &str) -> Result<ColumnWidths, Self::Error> {
-        Err(Self::Error::from(std::io::Error::new(
-            std::io::ErrorKind::Unsupported,
-            "worksheet_column_widths is unsupported for this format",
-        )))
-    }
+    fn worksheet_column_widths(&mut self, name: &str) -> Result<ColumnWidths, Self::Error>;
 }
 
 /// A trait to share spreadsheets reader functions across different `FileType`s
