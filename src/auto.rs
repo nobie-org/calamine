@@ -3,8 +3,7 @@
 use crate::errors::Error;
 use crate::vba::VbaProject;
 use crate::{
-    open_workbook, open_workbook_from_rs, DataRef, DataWithFormatting, HeaderRow, Metadata, Ods,
-    Range, Reader, ReaderRef, Xls, Xlsb, Xlsx,
+    open_workbook, open_workbook_from_rs, ColumnWidths, DataRef, DataWithFormatting, HeaderRow, Metadata, Ods, Range, Reader, ReaderRef, Xls, Xlsb, Xlsx
 };
 use std::borrow::Cow;
 use std::fs::File;
@@ -159,6 +158,15 @@ where
             Sheets::Xlsx(ref e) => e.pictures(),
             Sheets::Xlsb(ref e) => e.pictures(),
             Sheets::Ods(ref e) => e.pictures(),
+        }
+    }
+
+    fn worksheet_column_widths(&mut self, name: &str) -> Result<ColumnWidths, Self::Error> {
+        match self {
+            Sheets::Xlsx(ref mut e) => e.worksheet_column_widths(name).map_err(Error::Xlsx),
+            Sheets::Xlsb(ref mut e) => e.worksheet_column_widths(name).map_err(Error::Xlsb),
+            Sheets::Xls(ref mut e) => e.worksheet_column_widths(name).map_err(Error::Xls),
+            Sheets::Ods(ref mut e) => e.worksheet_column_widths(name).map_err(Error::Ods),
         }
     }
 }
