@@ -3,8 +3,8 @@
 use crate::errors::Error;
 use crate::vba::VbaProject;
 use crate::{
-    open_workbook, open_workbook_from_rs, ColumnWidths, DataRef, DataWithFormatting, HeaderRow,
-    Metadata, Ods, Range, Reader, ReaderRef, RowDefinitions, Theme, Xls, Xlsb, Xlsx,
+    open_workbook, open_workbook_from_rs, CellStyle, ColumnWidths, DataRef, DataWithFormatting,
+    HeaderRow, Metadata, Ods, Range, Reader, ReaderRef, RowDefinitions, Theme, Xls, Xlsb, Xlsx,
 };
 use std::borrow::Cow;
 use std::fs::File;
@@ -186,6 +186,15 @@ where
             Sheets::Xlsb(ref mut e) => e.theme().map_err(Error::Xlsb),
             Sheets::Xls(ref mut e) => e.theme().map_err(Error::Xls),
             Sheets::Ods(ref mut e) => e.theme().map_err(Error::Ods),
+        }
+    }
+
+    fn styles(&mut self) -> Result<Option<Vec<CellStyle>>, Self::Error> {
+        match self {
+            Sheets::Xlsx(ref mut e) => e.styles().map_err(Error::Xlsx),
+            Sheets::Xlsb(ref mut e) => e.styles().map_err(Error::Xlsb),
+            Sheets::Xls(ref mut e) => e.styles().map_err(Error::Xls),
+            Sheets::Ods(ref mut e) => e.styles().map_err(Error::Ods),
         }
     }
 }

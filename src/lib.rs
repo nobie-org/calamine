@@ -618,6 +618,37 @@ where
             "theme is unsupported for this format",
         )))
     }
+
+    /// Get style information from the workbook
+    ///
+    /// Returns an optional vector of all styles defined in the workbook.
+    /// This allows access to cell formatting information including fonts,
+    /// fills, borders, and number formats.
+    ///
+    /// Default implementation returns an Unsupported error for formats
+    /// that do not provide style information. Supported for XLSX.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use calamine::{Xlsx, open_workbook, Reader};
+    ///
+    /// # let path = format!("{}/tests/issue3.xlsm", env!("CARGO_MANIFEST_DIR"));
+    /// let mut workbook: Xlsx<_> = open_workbook(path).unwrap();
+    ///
+    /// if let Ok(Some(styles)) = workbook.styles() {
+    ///     println!("Found {} styles", styles.len());
+    ///     for (i, style) in styles.iter().enumerate() {
+    ///         println!("Style {}: {:?}", i, style.number_format);
+    ///     }
+    /// }
+    /// ```
+    fn styles(&mut self) -> Result<Option<Vec<CellStyle>>, Self::Error> {
+        Err(Self::Error::from(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "styles is unsupported for this format",
+        )))
+    }
 }
 
 /// A trait to share spreadsheets reader functions across different `FileType`s

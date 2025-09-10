@@ -511,8 +511,7 @@ impl<RS: Read + Seek> Xlsx<RS> {
                                 .attributes()
                                 .find(|a| a.as_ref().unwrap().key.local_name().as_ref() == b"name")
                             {
-                                theme_name =
-                                    Some(String::from_utf8_lossy(&name.value).to_string());
+                                theme_name = Some(String::from_utf8_lossy(&name.value).to_string());
                             }
                         }
                         b"clrScheme" => {
@@ -590,10 +589,9 @@ impl<RS: Read + Seek> Xlsx<RS> {
                         }
                         b"sysClr" if in_color_scheme && current_theme_color.is_some() => {
                             // For system colors, prefer lastClr attribute if available
-                            let color_val = if let Some(Ok(last_clr)) = e
-                                .attributes()
-                                .find(|a| a.as_ref().unwrap().key.local_name().as_ref() == b"lastClr")
-                            {
+                            let color_val = if let Some(Ok(last_clr)) = e.attributes().find(|a| {
+                                a.as_ref().unwrap().key.local_name().as_ref() == b"lastClr"
+                            }) {
                                 String::from_utf8_lossy(&last_clr.value).to_string()
                             } else if let Some(Ok(val)) = e
                                 .attributes()
@@ -658,9 +656,10 @@ impl<RS: Read + Seek> Xlsx<RS> {
                     b"fontScheme" => in_font_scheme = false,
                     b"majorFont" => reading_major_font = false,
                     b"minorFont" => reading_minor_font = false,
-                    b"dk1" | b"lt1" | b"dk2" | b"lt2" | b"accent1" | b"accent2" 
-                    | b"accent3" | b"accent4" | b"accent5" | b"accent6" 
-                    | b"hlink" | b"folHlink" if in_color_scheme => {
+                    b"dk1" | b"lt1" | b"dk2" | b"lt2" | b"accent1" | b"accent2" | b"accent3"
+                    | b"accent4" | b"accent5" | b"accent6" | b"hlink" | b"folHlink"
+                        if in_color_scheme =>
+                    {
                         current_theme_color = None;
                     }
                     _ => {}
@@ -2977,6 +2976,14 @@ impl<RS: Read + Seek> Reader<RS> for Xlsx<RS> {
         match &self.theme {
             Some(theme) => Ok(theme.clone()),
             None => Ok(Theme::default()),
+        }
+    }
+
+    fn styles(&mut self) -> Result<Option<Vec<CellStyle>>, XlsxError> {
+        if self.styles.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(self.styles.clone()))
         }
     }
 }
