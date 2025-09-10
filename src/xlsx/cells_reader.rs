@@ -86,8 +86,10 @@ where
                                 } => {
                                     if let Ok(width_str) = xml.decoder().decode(&v) {
                                         if let Ok(width) = width_str.parse::<f64>() {
-                                            column_widths.sheet_format.default_col_width = Some(width);
-                                            row_definitions.sheet_format.default_col_width = Some(width);
+                                            column_widths.sheet_format.default_col_width =
+                                                Some(width);
+                                            row_definitions.sheet_format.default_col_width =
+                                                Some(width);
                                         }
                                     }
                                 }
@@ -98,7 +100,8 @@ where
                                     if let Ok(width_str) = xml.decoder().decode(&v) {
                                         if let Ok(width) = width_str.parse::<u8>() {
                                             column_widths.sheet_format.base_col_width = Some(width);
-                                            row_definitions.sheet_format.base_col_width = Some(width);
+                                            row_definitions.sheet_format.base_col_width =
+                                                Some(width);
                                         }
                                     }
                                 }
@@ -108,8 +111,10 @@ where
                                 } => {
                                     if let Ok(height_str) = xml.decoder().decode(&v) {
                                         if let Ok(height) = height_str.parse::<f64>() {
-                                            column_widths.sheet_format.default_row_height = Some(height);
-                                            row_definitions.sheet_format.default_row_height = Some(height);
+                                            column_widths.sheet_format.default_row_height =
+                                                Some(height);
+                                            row_definitions.sheet_format.default_row_height =
+                                                Some(height);
                                         }
                                     }
                                 }
@@ -175,7 +180,8 @@ where
                                                 key: QName(b"customWidth"),
                                                 value: v,
                                             } => {
-                                                def.custom_width = Some(&*v == b"1" || &*v == b"true");
+                                                def.custom_width =
+                                                    Some(&*v == b"1" || &*v == b"true");
                                             }
                                             Attribute {
                                                 key: QName(b"bestFit"),
@@ -252,9 +258,7 @@ where
     /// Check if an absolute position is within any recorded spill source range
     pub fn is_in_spill(&self, pos: (u32, u32)) -> bool {
         let (row, col) = pos;
-        self.spill_sources
-            .iter()
-            .any(|d| d.contains(row, col))
+        self.spill_sources.iter().any(|d| d.contains(row, col))
     }
 
     /// Whether the last returned cell had its own formula (<f> element)
@@ -277,8 +281,7 @@ where
     }
 
     pub fn next_cell(&mut self) -> Result<Option<Cell<DataRef<'a>>>, XlsxError> {
-        self
-            .next_cell_with_formatting()
+        self.next_cell_with_formatting()
             .map(|opt| opt.map(|(cell, _)| cell))
     }
 
@@ -296,7 +299,7 @@ where
                     if let Some(range) = attribute {
                         let row = get_row(range)?;
                         self.row_index = row;
-                        
+
                         // Parse row definition attributes
                         let mut row_def = RowDefinition {
                             r: row,
@@ -309,7 +312,7 @@ where
                             thick_top: None,
                             thick_bot: None,
                         };
-                        
+
                         // Parse row attributes
                         for a in row_element.attributes() {
                             match a.map_err(XlsxError::XmlAttr)? {
@@ -368,12 +371,17 @@ where
                                 _ => {}
                             }
                         }
-                        
+
                         // Store row definition if it has any meaningful information
-                        if row_def.height.is_some() || row_def.style.is_some() || 
-                           row_def.custom_height == Some(true) || row_def.hidden == Some(true) ||
-                           row_def.outline_level.is_some() || row_def.collapsed == Some(true) ||
-                           row_def.thick_top == Some(true) || row_def.thick_bot == Some(true) {
+                        if row_def.height.is_some()
+                            || row_def.style.is_some()
+                            || row_def.custom_height == Some(true)
+                            || row_def.hidden == Some(true)
+                            || row_def.outline_level.is_some()
+                            || row_def.collapsed == Some(true)
+                            || row_def.thick_top == Some(true)
+                            || row_def.thick_bot == Some(true)
+                        {
                             self.row_definitions.add_row_definition(row_def);
                         }
                     }
@@ -400,7 +408,8 @@ where
                             Ok(Event::Start(ref e)) => {
                                 if e.local_name().as_ref() == b"f" {
                                     had_formula = true;
-                                    if let Ok(Some(t)) = get_attribute(e.attributes(), QName(b"t")) {
+                                    if let Ok(Some(t)) = get_attribute(e.attributes(), QName(b"t"))
+                                    {
                                         if t == b"array" {
                                             if let Ok(Some(r)) =
                                                 get_attribute(e.attributes(), QName(b"ref"))

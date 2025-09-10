@@ -1,4 +1,3 @@
-
 /// Raw column definition from Excel XML
 #[derive(Debug, Clone)]
 pub struct ColumnDefinition {
@@ -119,9 +118,7 @@ impl RowDefinitions {
 
     /// Find row definition for a specific row (1-based)
     pub fn find_definition_for_row(&self, row_index: u32) -> Option<&RowDefinition> {
-        self.row_definitions
-            .iter()
-            .find(|def| def.r == row_index)
+        self.row_definitions.iter().find(|def| def.r == row_index)
     }
 }
 
@@ -137,16 +134,16 @@ pub mod utils {
         if let Some(width) = column_width {
             return width;
         }
-        
+
         if let Some(default) = default_col_width {
             return default;
         }
-        
+
         if let Some(base) = base_col_width {
             // Excel's formula for default width from base
             return base as f64 + 5.0 / 7.0;
         }
-        
+
         // Excel's ultimate default
         8.43
     }
@@ -188,7 +185,7 @@ mod tests {
             outline_level: None,
             collapsed: None,
         });
-        
+
         let defs = widths.find_definitions_for_column(2);
         assert_eq!(defs.len(), 1);
         assert_eq!(defs[0].width.unwrap(), 10.5);
@@ -200,7 +197,7 @@ mod tests {
         assert_eq!(utils::get_effective_width(Some(10.5), None, None), 10.5);
         assert_eq!(utils::get_effective_width(None, Some(9.0), None), 9.0);
         assert_eq!(utils::get_effective_width(None, None, None), 8.43);
-        
+
         // Test pixel conversions
         assert_eq!(utils::character_units_to_pixels(8.0, 7.0), 61);
         // Test pixel to character conversion

@@ -1,8 +1,8 @@
 use calamine::Data::{Bool, DateTime, DateTimeIso, DurationIso, Empty, Error, Float, Int, String};
 use calamine::{
     open_workbook, open_workbook_auto, CellFormat, Color, ColumnDefinition, ColumnWidths, DataRef,
-    DataWithFormatting, Dimensions, ExcelDateTime, ExcelDateTimeType, HeaderRow, Ods,
-    PatternType, Range, Reader, ReaderRef, Sheet, SheetType, SheetVisible, Xls, Xlsb, Xlsx,
+    DataWithFormatting, Dimensions, ExcelDateTime, ExcelDateTimeType, HeaderRow, Ods, PatternType,
+    Range, Reader, ReaderRef, Sheet, SheetType, SheetVisible, Xls, Xlsb, Xlsx,
 };
 use calamine::{CellErrorType::*, Data};
 use rstest::rstest;
