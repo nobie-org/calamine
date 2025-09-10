@@ -74,6 +74,57 @@ impl ColumnWidths {
     }
 }
 
+/// Raw row definition from Excel XML
+#[derive(Debug, Clone)]
+pub struct RowDefinition {
+    /// r attribute: Row index (1-based)
+    pub r: u32,
+    /// ht attribute: Row height as a double
+    pub height: Option<f64>,
+    /// s attribute: Style index (0-65429)
+    pub style: Option<u32>,
+    /// customHeight attribute
+    pub custom_height: Option<bool>,
+    /// hidden attribute
+    pub hidden: Option<bool>,
+    /// outlineLevel attribute (0-7)
+    pub outline_level: Option<u8>,
+    /// collapsed attribute
+    pub collapsed: Option<bool>,
+    /// thickTop attribute
+    pub thick_top: Option<bool>,
+    /// thickBot attribute
+    pub thick_bot: Option<bool>,
+}
+
+/// Raw row data from Excel worksheet
+#[derive(Debug, Clone, Default)]
+pub struct RowDefinitions {
+    /// Row definitions in document order
+    pub row_definitions: Vec<RowDefinition>,
+    /// Sheet format properties (shared with columns)
+    pub sheet_format: SheetFormatProperties,
+}
+
+impl RowDefinitions {
+    /// Create new empty container
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Add a row definition
+    pub fn add_row_definition(&mut self, def: RowDefinition) {
+        self.row_definitions.push(def);
+    }
+
+    /// Find row definition for a specific row (1-based)
+    pub fn find_definition_for_row(&self, row_index: u32) -> Option<&RowDefinition> {
+        self.row_definitions
+            .iter()
+            .find(|def| def.r == row_index)
+    }
+}
+
 /// Utility functions for Excel column width conversions
 pub mod utils {
     /// Apply Excel default logic to get effective column width

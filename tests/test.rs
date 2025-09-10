@@ -1,7 +1,7 @@
 use calamine::Data::{Bool, DateTime, DateTimeIso, DurationIso, Empty, Error, Float, Int, String};
 use calamine::{
     open_workbook, open_workbook_auto, CellFormat, Color, ColumnDefinition, ColumnWidths, DataRef,
-    DataType, DataWithFormatting, Dimensions, ExcelDateTime, ExcelDateTimeType, HeaderRow, Ods,
+    DataWithFormatting, Dimensions, ExcelDateTime, ExcelDateTimeType, HeaderRow, Ods,
     PatternType, Range, Reader, ReaderRef, Sheet, SheetType, SheetVisible, Xls, Xlsb, Xlsx,
 };
 use calamine::{CellErrorType::*, Data};
@@ -2842,13 +2842,30 @@ fn test_column_widths() {
     let mut excel: Xlsx<_> = wb("format.xlsx");
 
     // Get column widths for a worksheet
-    let _column_widths = excel.worksheet_column_widths("Sheet1").unwrap();
+    let column_widths = excel.worksheet_column_widths("Sheet1").unwrap();
 
     // Test that we got some column definitions
     // The actual parsing of widths is now tested in the column_width module tests
 
     // The new API returns raw values from the file
     // Testing is done within the library's unit tests
+    assert!(!column_widths.column_definitions.is_empty());
+}
+
+#[test]
+fn test_row_definitions() {
+    let mut excel: Xlsx<_> = wb("rows.xlsx");
+    let sheets = excel.sheet_names();
+    for sheet in sheets {
+        excel.worksheet_range_ref(&sheet).unwrap();
+    }
+    // Get row definitions for a worksheet
+    let row_definitions = excel.worksheet_row_definitions("Sheet1").unwrap();
+
+    assert_eq!(row_definitions.row_definitions.len(), 4);
+    let row_definition = row_definitions.row_definitions.first().unwrap();
+    assert!(row_definition.height.unwrap() - 35.0 < 0.1);
+    assert_eq!(row_definition.style.unwrap(), 1);
 }
 
 #[test]
