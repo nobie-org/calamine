@@ -80,29 +80,31 @@ fn test_theme_font_scheme() {
 fn test_rows_xlsx_theme() {
     // Test with rows.xlsx which has a custom Office theme
     let mut excel: Xlsx<_> = wb("rows.xlsx");
-    
-    let theme = excel.theme().expect("Should be able to get theme from rows.xlsx");
-    
+
+    let theme = excel
+        .theme()
+        .expect("Should be able to get theme from rows.xlsx");
+
     // Verify theme name
     assert_eq!(theme.name, Some("Office Theme".to_string()));
-    
+
     // Verify color scheme name
     assert_eq!(theme.color_scheme.name, Some("Office".to_string()));
-    
+
     // Verify specific colors from the theme XML
     // The theme uses specific RGB values that we can test
     use calamine::Color;
-    
+
     // Test dark2 color: <a:srgbClr val="0E2841"/>
     match &theme.color_scheme.dark2 {
         Color::Rgb { r, g, b } => {
             assert_eq!(*r, 0x0E);
-            assert_eq!(*g, 0x28); 
+            assert_eq!(*g, 0x28);
             assert_eq!(*b, 0x41);
         }
         _ => panic!("Expected RGB color for dark2"),
     }
-    
+
     // Test light2 color: <a:srgbClr val="E8E8E8"/>
     match &theme.color_scheme.light2 {
         Color::Rgb { r, g, b } => {
@@ -112,7 +114,7 @@ fn test_rows_xlsx_theme() {
         }
         _ => panic!("Expected RGB color for light2"),
     }
-    
+
     // Test accent1 color: <a:srgbClr val="156082"/>
     match &theme.color_scheme.accent1 {
         Color::Rgb { r, g, b } => {
@@ -122,7 +124,7 @@ fn test_rows_xlsx_theme() {
         }
         _ => panic!("Expected RGB color for accent1"),
     }
-    
+
     // Test accent2 color: <a:srgbClr val="E97132"/>
     match &theme.color_scheme.accent2 {
         Color::Rgb { r, g, b } => {
@@ -132,7 +134,7 @@ fn test_rows_xlsx_theme() {
         }
         _ => panic!("Expected RGB color for accent2"),
     }
-    
+
     // Test accent3 color: <a:srgbClr val="196B24"/>
     match &theme.color_scheme.accent3 {
         Color::Rgb { r, g, b } => {
@@ -142,7 +144,7 @@ fn test_rows_xlsx_theme() {
         }
         _ => panic!("Expected RGB color for accent3"),
     }
-    
+
     // Test accent4 color: <a:srgbClr val="0F9ED5"/>
     match &theme.color_scheme.accent4 {
         Color::Rgb { r, g, b } => {
@@ -152,7 +154,7 @@ fn test_rows_xlsx_theme() {
         }
         _ => panic!("Expected RGB color for accent4"),
     }
-    
+
     // Test accent5 color: <a:srgbClr val="A02B93"/>
     match &theme.color_scheme.accent5 {
         Color::Rgb { r, g, b } => {
@@ -162,7 +164,7 @@ fn test_rows_xlsx_theme() {
         }
         _ => panic!("Expected RGB color for accent5"),
     }
-    
+
     // Test accent6 color: <a:srgbClr val="4EA72E"/>
     match &theme.color_scheme.accent6 {
         Color::Rgb { r, g, b } => {
@@ -172,7 +174,7 @@ fn test_rows_xlsx_theme() {
         }
         _ => panic!("Expected RGB color for accent6"),
     }
-    
+
     // Test hyperlink color: <a:srgbClr val="467886"/>
     match &theme.color_scheme.hyperlink {
         Color::Rgb { r, g, b } => {
@@ -182,7 +184,7 @@ fn test_rows_xlsx_theme() {
         }
         _ => panic!("Expected RGB color for hyperlink"),
     }
-    
+
     // Test followed hyperlink color: <a:srgbClr val="96607D"/>
     match &theme.color_scheme.followed_hyperlink {
         Color::Rgb { r, g, b } => {
@@ -192,30 +194,45 @@ fn test_rows_xlsx_theme() {
         }
         _ => panic!("Expected RGB color for followed hyperlink"),
     }
-    
+
     // Verify font scheme name
     assert_eq!(theme.font_scheme.name, Some("Office".to_string()));
-    
+
     // Verify major font: <a:latin typeface="Aptos Display"
     if let Some(major_font) = &theme.font_scheme.major_font.latin {
         assert_eq!(major_font.as_ref(), "Aptos Display");
     } else {
         panic!("Expected major font to be present");
     }
-    
+
     // Verify minor font: <a:latin typeface="Aptos Narrow"
     if let Some(minor_font) = &theme.font_scheme.minor_font.latin {
         assert_eq!(minor_font.as_ref(), "Aptos Narrow");
     } else {
         panic!("Expected minor font to be present");
     }
-    
+
     // Test color access by index matches the expected colors
-    assert_eq!(theme.color_scheme.get_color(2), Some(&theme.color_scheme.dark2));
-    assert_eq!(theme.color_scheme.get_color(3), Some(&theme.color_scheme.light2));
-    assert_eq!(theme.color_scheme.get_color(4), Some(&theme.color_scheme.accent1));
-    assert_eq!(theme.color_scheme.get_color(10), Some(&theme.color_scheme.hyperlink));
-    assert_eq!(theme.color_scheme.get_color(11), Some(&theme.color_scheme.followed_hyperlink));
+    assert_eq!(
+        theme.color_scheme.get_color(2),
+        Some(&theme.color_scheme.dark2)
+    );
+    assert_eq!(
+        theme.color_scheme.get_color(3),
+        Some(&theme.color_scheme.light2)
+    );
+    assert_eq!(
+        theme.color_scheme.get_color(4),
+        Some(&theme.color_scheme.accent1)
+    );
+    assert_eq!(
+        theme.color_scheme.get_color(10),
+        Some(&theme.color_scheme.hyperlink)
+    );
+    assert_eq!(
+        theme.color_scheme.get_color(11),
+        Some(&theme.color_scheme.followed_hyperlink)
+    );
 }
 
 #[test]
@@ -223,7 +240,7 @@ fn test_auto_reader_theme() {
     // Test that the auto reader can also access themes
     let path = format!("{}/tests/rows.xlsx", env!("CARGO_MANIFEST_DIR"));
     let mut workbook = open_workbook_auto(&path).expect("Cannot open rows.xlsx with auto reader");
-    
+
     // Should be able to call theme() on the auto reader
     match workbook.theme() {
         Ok(theme) => {
@@ -231,7 +248,7 @@ fn test_auto_reader_theme() {
             assert_eq!(theme.name, Some("Office Theme".to_string()));
             assert_eq!(theme.color_scheme.name, Some("Office".to_string()));
             assert_eq!(theme.font_scheme.name, Some("Office".to_string()));
-            
+
             // Test that it detected this is an XLSX file by checking if we get a theme
             // (only XLSX supports themes, other formats would return default or error)
             if let Some(major_font) = &theme.font_scheme.major_font.latin {
