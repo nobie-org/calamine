@@ -72,6 +72,7 @@ mod xlsx;
 
 mod de;
 mod errors;
+mod theme;
 pub mod vba;
 
 use serde::de::{Deserialize, DeserializeOwned, Deserializer};
@@ -100,9 +101,15 @@ pub use crate::formats::{
     CellStyle, Color, Fill, Font, FormatStringInterner, PatternType,
 };
 pub use crate::ods::{Ods, OdsError};
+pub use crate::theme::{
+    ColorScheme, EffectStyle, FillStyle, FontScheme, FormatScheme, LineStyle, Theme, ThemeFont,
+};
 pub use crate::xls::{Xls, XlsError, XlsOptions};
 pub use crate::xlsb::{Xlsb, XlsbError};
-pub use crate::xlsx::{ColumnDefinition, ColumnWidths, RowDefinition, RowDefinitions, SheetFormatProperties, Xlsx, XlsxError};
+pub use crate::xlsx::{
+    ColumnDefinition, ColumnWidths, RowDefinition, RowDefinitions, SheetFormatProperties, Xlsx,
+    XlsxError,
+};
 
 use crate::vba::VbaProject;
 
@@ -579,6 +586,36 @@ where
         Err(Self::Error::from(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
             "worksheet_row_definitions is unsupported for this format",
+        )))
+    }
+
+    /// Get theme information from the workbook
+    ///
+    /// Returns the theme information including color scheme, font scheme, and format scheme.
+    /// This allows access to theme colors and fonts that cells can reference.
+    ///
+    /// Default implementation returns an Unsupported error for formats
+    /// that do not provide theme information. Supported for XLSX.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use calamine::{Xlsx, open_workbook, Reader};
+    ///
+    /// # let path = format!("{}/tests/issue3.xlsm", env!("CARGO_MANIFEST_DIR"));
+    /// let mut workbook: Xlsx<_> = open_workbook(path).unwrap();
+    ///
+    /// if let Ok(theme) = workbook.theme() {
+    ///     // Access theme colors
+    ///     let accent1 = theme.color_scheme.get_color(4); // Accent 1 color
+    ///     println!("Theme name: {:?}", theme.name);
+    ///     println!("Major font: {:?}", theme.font_scheme.major_font.latin);
+    /// }
+    /// ```
+    fn theme(&mut self) -> Result<Theme, Self::Error> {
+        Err(Self::Error::from(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "theme is unsupported for this format",
         )))
     }
 }

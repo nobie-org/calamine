@@ -25,13 +25,16 @@ use crate::formats::{
     builtin_format_by_id, detect_custom_number_format_with_interner, Alignment, Border, BorderSide,
     CellFormat, CellStyle, Color, Fill, Font, FormatStringInterner,
 };
+use crate::theme::Theme;
 use crate::vba::VbaProject;
 use crate::{
     Cell, CellErrorType, Data, DataWithFormatting, Dimensions, HeaderRow, Metadata, Range, Reader,
     ReaderRef, Sheet, SheetType, SheetVisible, Table,
 };
 pub use cells_reader::XlsxCellReader;
-pub use column_width::{ColumnDefinition, ColumnWidths, RowDefinition, RowDefinitions, SheetFormatProperties};
+pub use column_width::{
+    ColumnDefinition, ColumnWidths, RowDefinition, RowDefinitions, SheetFormatProperties,
+};
 
 pub(crate) type XlReader<'a, RS> = XmlReader<BufReader<ZipFile<'a, RS>>>;
 
@@ -231,6 +234,8 @@ pub struct Xlsx<RS> {
     dxf_formats: Vec<DifferentialFormat>,
     /// Conditional formatting rules by sheet name
     conditional_formats: BTreeMap<String, Vec<ConditionalFormatting>>,
+    /// Theme information
+    theme: Option<Theme>,
 }
 
 /// Xlsx reader options
@@ -474,6 +479,206 @@ impl<RS: Read + Seek> Xlsx<RS> {
             }
         }
 
+        Ok(())
+    }
+
+    fn read_theme(&mut self) -> Result<(), XlsxError> {
+        let mut xml = match xml_reader(&mut self.zip, "xl/theme/theme1.xml") {
+            None => return Ok(()), // No theme file is OK, we'll use default
+            Some(x) => x?,
+        };
+
+        use crate::theme::{ColorScheme, FontScheme};
+
+        let mut theme_name = None;
+        let mut color_scheme = ColorScheme::default();
+        let mut font_scheme = FontScheme::default();
+
+        let mut buf = Vec::with_capacity(1024);
+        let mut in_color_scheme = false;
+        let mut in_font_scheme = false;
+        let mut reading_major_font = false;
+        let mut reading_minor_font = false;
+        let mut current_theme_color: Option<&str> = None;
+
+        loop {
+            buf.clear();
+            match xml.read_event_into(&mut buf) {
+                Ok(Event::Start(ref e)) => {
+                    match e.local_name().as_ref() {
+                        b"theme" => {
+                            if let Some(Ok(name)) = e
+                                .attributes()
+                                .find(|a| a.as_ref().unwrap().key.local_name().as_ref() == b"name")
+                            {
+                                theme_name =
+                                    Some(String::from_utf8_lossy(&name.value).to_string());
+                            }
+                        }
+                        b"clrScheme" => {
+                            in_color_scheme = true;
+                            if let Some(Ok(name)) = e
+                                .attributes()
+                                .find(|a| a.as_ref().unwrap().key.local_name().as_ref() == b"name")
+                            {
+                                color_scheme.name =
+                                    Some(String::from_utf8_lossy(&name.value).to_string());
+                            }
+                        }
+                        // Theme color elements
+                        b"dk1" if in_color_scheme => current_theme_color = Some("dk1"),
+                        b"lt1" if in_color_scheme => current_theme_color = Some("lt1"),
+                        b"dk2" if in_color_scheme => current_theme_color = Some("dk2"),
+                        b"lt2" if in_color_scheme => current_theme_color = Some("lt2"),
+                        b"accent1" if in_color_scheme => current_theme_color = Some("accent1"),
+                        b"accent2" if in_color_scheme => current_theme_color = Some("accent2"),
+                        b"accent3" if in_color_scheme => current_theme_color = Some("accent3"),
+                        b"accent4" if in_color_scheme => current_theme_color = Some("accent4"),
+                        b"accent5" if in_color_scheme => current_theme_color = Some("accent5"),
+                        b"accent6" if in_color_scheme => current_theme_color = Some("accent6"),
+                        b"hlink" if in_color_scheme => current_theme_color = Some("hlink"),
+                        b"folHlink" if in_color_scheme => current_theme_color = Some("folHlink"),
+                        b"fontScheme" => {
+                            in_font_scheme = true;
+                            if let Some(Ok(name)) = e
+                                .attributes()
+                                .find(|a| a.as_ref().unwrap().key.local_name().as_ref() == b"name")
+                            {
+                                font_scheme.name =
+                                    Some(String::from_utf8_lossy(&name.value).to_string());
+                            }
+                        }
+                        b"majorFont" if in_font_scheme => {
+                            reading_major_font = true;
+                        }
+                        b"minorFont" if in_font_scheme => {
+                            reading_minor_font = true;
+                        }
+                        b"srgbClr" if in_color_scheme && current_theme_color.is_some() => {
+                            if let Some(Ok(val)) = e
+                                .attributes()
+                                .find(|a| a.as_ref().unwrap().key.local_name().as_ref() == b"val")
+                            {
+                                let color_val = String::from_utf8_lossy(&val.value);
+                                if color_val.len() == 6 {
+                                    // Parse RGB hex color
+                                    if let (Ok(r), Ok(g), Ok(b)) = (
+                                        u8::from_str_radix(&color_val[0..2], 16),
+                                        u8::from_str_radix(&color_val[2..4], 16),
+                                        u8::from_str_radix(&color_val[4..6], 16),
+                                    ) {
+                                        let color = Color::Rgb { r, g, b };
+                                        // Assign color based on the current theme color element
+                                        match current_theme_color.unwrap() {
+                                            "dk1" => color_scheme.dark1 = color,
+                                            "lt1" => color_scheme.light1 = color,
+                                            "dk2" => color_scheme.dark2 = color,
+                                            "lt2" => color_scheme.light2 = color,
+                                            "accent1" => color_scheme.accent1 = color,
+                                            "accent2" => color_scheme.accent2 = color,
+                                            "accent3" => color_scheme.accent3 = color,
+                                            "accent4" => color_scheme.accent4 = color,
+                                            "accent5" => color_scheme.accent5 = color,
+                                            "accent6" => color_scheme.accent6 = color,
+                                            "hlink" => color_scheme.hyperlink = color,
+                                            "folHlink" => color_scheme.followed_hyperlink = color,
+                                            _ => {}
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        b"sysClr" if in_color_scheme && current_theme_color.is_some() => {
+                            // For system colors, prefer lastClr attribute if available
+                            let color_val = if let Some(Ok(last_clr)) = e
+                                .attributes()
+                                .find(|a| a.as_ref().unwrap().key.local_name().as_ref() == b"lastClr")
+                            {
+                                String::from_utf8_lossy(&last_clr.value).to_string()
+                            } else if let Some(Ok(val)) = e
+                                .attributes()
+                                .find(|a| a.as_ref().unwrap().key.local_name().as_ref() == b"val")
+                            {
+                                let val_str = String::from_utf8_lossy(&val.value);
+                                // Map common system colors to RGB values
+                                match val_str.as_ref() {
+                                    "windowText" => "000000".to_string(),
+                                    "window" => "FFFFFF".to_string(),
+                                    _ => val_str.to_string(),
+                                }
+                            } else {
+                                continue;
+                            };
+
+                            if color_val.len() == 6 {
+                                // Parse RGB hex color
+                                if let (Ok(r), Ok(g), Ok(b)) = (
+                                    u8::from_str_radix(&color_val[0..2], 16),
+                                    u8::from_str_radix(&color_val[2..4], 16),
+                                    u8::from_str_radix(&color_val[4..6], 16),
+                                ) {
+                                    let color = Color::Rgb { r, g, b };
+                                    // Assign color based on the current theme color element
+                                    match current_theme_color.unwrap() {
+                                        "dk1" => color_scheme.dark1 = color,
+                                        "lt1" => color_scheme.light1 = color,
+                                        "dk2" => color_scheme.dark2 = color,
+                                        "lt2" => color_scheme.light2 = color,
+                                        "accent1" => color_scheme.accent1 = color,
+                                        "accent2" => color_scheme.accent2 = color,
+                                        "accent3" => color_scheme.accent3 = color,
+                                        "accent4" => color_scheme.accent4 = color,
+                                        "accent5" => color_scheme.accent5 = color,
+                                        "accent6" => color_scheme.accent6 = color,
+                                        "hlink" => color_scheme.hyperlink = color,
+                                        "folHlink" => color_scheme.followed_hyperlink = color,
+                                        _ => {}
+                                    }
+                                }
+                            }
+                        }
+                        b"latin" if in_font_scheme => {
+                            if let Some(Ok(typeface)) = e.attributes().find(|a| {
+                                a.as_ref().unwrap().key.local_name().as_ref() == b"typeface"
+                            }) {
+                                let font_name =
+                                    String::from_utf8_lossy(&typeface.value).to_string();
+                                if reading_major_font {
+                                    font_scheme.major_font.latin = Some(Arc::from(font_name));
+                                } else if reading_minor_font {
+                                    font_scheme.minor_font.latin = Some(Arc::from(font_name));
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(Event::End(ref e)) => match e.local_name().as_ref() {
+                    b"clrScheme" => in_color_scheme = false,
+                    b"fontScheme" => in_font_scheme = false,
+                    b"majorFont" => reading_major_font = false,
+                    b"minorFont" => reading_minor_font = false,
+                    b"dk1" | b"lt1" | b"dk2" | b"lt2" | b"accent1" | b"accent2" 
+                    | b"accent3" | b"accent4" | b"accent5" | b"accent6" 
+                    | b"hlink" | b"folHlink" if in_color_scheme => {
+                        current_theme_color = None;
+                    }
+                    _ => {}
+                },
+                Ok(Event::Eof) => break,
+                Err(e) => return Err(XlsxError::Xml(e)),
+                _ => {}
+            }
+        }
+
+        let theme = crate::theme::Theme {
+            name: theme_name,
+            color_scheme,
+            font_scheme,
+            format_scheme: None, // Format scheme parsing can be added later if needed
+        };
+
+        self.theme = Some(theme);
         Ok(())
     }
 
@@ -2614,9 +2819,11 @@ impl<RS: Read + Seek> Reader<RS> for Xlsx<RS> {
             options: XlsxOptions::default(),
             dxf_formats: Vec::new(),
             conditional_formats: BTreeMap::new(),
+            theme: None,
         };
         xlsx.read_shared_strings()?;
         xlsx.read_styles()?;
+        xlsx.read_theme()?;
         let relationships = xlsx.read_relationships()?;
         xlsx.read_workbook(&relationships)?;
         #[cfg(feature = "picture")]
@@ -2764,6 +2971,13 @@ impl<RS: Read + Seek> Reader<RS> for Xlsx<RS> {
 
     fn worksheet_row_definitions(&mut self, name: &str) -> Result<RowDefinitions, XlsxError> {
         Xlsx::worksheet_row_definitions(self, name)
+    }
+
+    fn theme(&mut self) -> Result<Theme, XlsxError> {
+        match &self.theme {
+            Some(theme) => Ok(theme.clone()),
+            None => Ok(Theme::default()),
+        }
     }
 }
 
@@ -3313,6 +3527,7 @@ mod tests {
             options: XlsxOptions::default(),
             dxf_formats: vec![],
             conditional_formats: BTreeMap::new(),
+            theme: None,
         };
 
         assert!(xlsx.read_shared_strings().is_ok());
