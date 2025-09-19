@@ -2986,6 +2986,35 @@ impl<RS: Read + Seek> Reader<RS> for Xlsx<RS> {
             Ok(Some(self.styles.clone()))
         }
     }
+
+    fn worksheet_formats(&mut self, name: &str) -> Result<Range<CellStyle>, XlsxError> {
+        let mut cell_reader = match self.worksheet_cells_reader(name) {
+            Ok(reader) => reader,
+            Err(XlsxError::NotAWorksheet(typ)) => {
+                log::warn!("'{typ}' not a valid worksheet");
+                return Ok(Range::default());
+            }
+            Err(e) => return Err(e),
+        };
+
+        let dimensions = cell_reader.dimensions();
+        if dimensions.start == (0, 0) && dimensions.end == (0, 0) {
+            return Ok(Range::empty());
+        }
+
+        let len = dimensions.len();
+        let mut cells = Vec::new();
+        if len < 100_000 {
+            cells.reserve(len as usize);
+        }
+
+        while let Some((cell, formatting)) = cell_reader.next_cell_with_formatting()? {
+            let style = formatting.cloned().unwrap_or_default();
+            cells.push(Cell::new(cell.pos, style));
+        }
+
+        Ok(Range::from_sparse(cells))
+    }
 }
 
 impl<RS: Read + Seek> ReaderRef<RS> for Xlsx<RS> {
