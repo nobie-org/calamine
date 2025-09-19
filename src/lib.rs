@@ -649,6 +649,38 @@ where
             "styles is unsupported for this format",
         )))
     }
+
+    /// Get worksheet style information for all cells
+    ///
+    /// Returns a range of CellStyle information for all cells in the worksheet,
+    /// including cells that don't have values. This allows access to formatting
+    /// information for the entire worksheet grid.
+    ///
+    /// Default implementation returns an Unsupported error for formats
+    /// that do not provide this functionality. Supported for XLSX.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use calamine::{Xlsx, open_workbook, Reader};
+    ///
+    /// # let path = format!("{}/tests/issue3.xlsm", env!("CARGO_MANIFEST_DIR"));
+    /// let mut workbook: Xlsx<_> = open_workbook(path).unwrap();
+    ///
+    /// if let Ok(formats) = workbook.worksheet_formats("Sheet1") {
+    ///     for (row, col, style) in formats.used_cells() {
+    ///         if !style.is_default() {
+    ///             println!("Cell ({}, {}) has formatting: {:?}", row, col, style.number_format);
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    fn worksheet_formats(&mut self, _name: &str) -> Result<Range<CellStyle>, Self::Error> {
+        Err(Self::Error::from(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "worksheet_formats is unsupported for this format",
+        )))
+    }
 }
 
 /// A trait to share spreadsheets reader functions across different `FileType`s
@@ -703,6 +735,7 @@ impl CellType for Data {}
 impl<'a> CellType for DataRef<'a> {}
 impl CellType for String {}
 impl CellType for usize {} // for tests
+impl CellType for CellStyle {}
 
 /// A struct to hold cell position and value
 #[derive(Debug, Clone)]

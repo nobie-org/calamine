@@ -399,7 +399,17 @@ where
                     } else {
                         (self.row_index, self.col_index)
                     };
-                    let (mut value, mut cell_formatting) = (DataRef::Empty, None);
+                    
+                    // Extract formatting information from the cell element
+                    let cell_formatting = match get_attribute(c_element.attributes(), QName(b"s")) {
+                        Ok(Some(style)) => {
+                            let id = atoi_simd::parse::<usize>(style).unwrap_or(0);
+                            self.formats.get(id)
+                        }
+                        _ => None,
+                    };
+                    
+                    let mut value = DataRef::Empty;
                     let mut had_formula = false;
 
                     loop {
@@ -420,7 +430,7 @@ where
                                         }
                                     }
                                 }
-                                let (val, formatting) = read_value_with_formatting(
+                                let (val, _) = read_value_with_formatting(
                                     self.strings,
                                     self.formats,
                                     self.is_1904,
@@ -429,7 +439,7 @@ where
                                     c_element,
                                 )?;
                                 value = val;
-                                cell_formatting = formatting;
+                                // Keep the formatting we already extracted from the cell element
                             }
                             Ok(Event::Empty(ref e)) if e.local_name().as_ref() == b"f" => {
                                 // Catch inline empty <f .../> tags too
