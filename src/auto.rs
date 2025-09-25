@@ -197,6 +197,15 @@ where
             Sheets::Ods(ref mut e) => e.styles().map_err(Error::Ods),
         }
     }
+
+    fn worksheet_formats(&mut self, name: &str) -> Result<Range<CellStyle>, Self::Error> {
+        match self {
+            Sheets::Xlsx(ref mut e) => e.worksheet_formats(name).map_err(Error::Xlsx),
+            Sheets::Xlsb(ref mut e) => e.worksheet_formats(name).map_err(Error::Xlsb),
+            Sheets::Xls(ref mut e) => e.worksheet_formats(name).map_err(Error::Xls),
+            Sheets::Ods(ref mut e) => e.worksheet_formats(name).map_err(Error::Ods),
+        }
+    }
 }
 
 impl<RS> ReaderRef<RS> for Sheets<RS>

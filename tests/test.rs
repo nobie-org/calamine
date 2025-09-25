@@ -3006,3 +3006,56 @@ fn test_numfmt_quoted_dollar_and_euro() {
         .expect("A1 formatting must match an existing format entry");
     assert_eq!(a1_idx, 1);
 }
+
+
+#[test]
+fn test_colors() {
+    let mut excel: Xlsx<_> = wb("colortest.xlsx");
+    let sheet_name = "Sheet1";
+    let styles = excel.worksheet_formats(sheet_name).unwrap();
+
+    // Check cell A1 (row 0, col 0) is red
+    let cell_a1 = styles.get((0, 0)).unwrap();
+    assert!(cell_a1.fill.is_some(), "Cell A1 should have fill information");
+    let fill_a1 = cell_a1.fill.as_ref().unwrap();
+    assert!(fill_a1.foreground_color.is_some(), "Cell A1 should have foreground color");
+    match fill_a1.foreground_color.as_ref().unwrap() {
+        Color::Argb { a, r, g, b } => {
+            assert_eq!(*a, 0xFF, "Cell A1 alpha should be FF");
+            assert_eq!(*r, 0xFF, "Cell A1 red should be FF");
+            assert_eq!(*g, 0x00, "Cell A1 green should be 00");
+            assert_eq!(*b, 0x00, "Cell A1 blue should be 00");
+        }
+        _ => panic!("Cell A1 should have ARGB color"),
+    }
+
+    // Check cell B2 (row 1, col 1) is green
+    let cell_b2 = styles.get((1, 1)).unwrap();
+    assert!(cell_b2.fill.is_some(), "Cell B2 should have fill information");
+    let fill_b2 = cell_b2.fill.as_ref().unwrap();
+    assert!(fill_b2.foreground_color.is_some(), "Cell B2 should have foreground color");
+    match fill_b2.foreground_color.as_ref().unwrap() {
+        Color::Argb { a, r, g, b } => {
+            assert_eq!(*a, 0xFF, "Cell B2 alpha should be FF");
+            assert_eq!(*r, 0x92, "Cell B2 red should be 92");
+            assert_eq!(*g, 0xD0, "Cell B2 green should be D0");
+            assert_eq!(*b, 0x50, "Cell B2 blue should be 50");
+        }
+        _ => panic!("Cell B2 should have ARGB color"),
+    }
+
+    // Check cell A3 (row 2, col 0) is blue
+    let cell_a3 = styles.get((2, 0)).unwrap();
+    assert!(cell_a3.fill.is_some(), "Cell A3 should have fill information");
+    let fill_a3 = cell_a3.fill.as_ref().unwrap();
+    assert!(fill_a3.foreground_color.is_some(), "Cell A3 should have foreground color");
+    match fill_a3.foreground_color.as_ref().unwrap() {
+        Color::Argb { a, r, g, b } => {
+            assert_eq!(*a, 0xFF, "Cell A3 alpha should be FF");
+            assert_eq!(*r, 0x00, "Cell A3 red should be 00");
+            assert_eq!(*g, 0xB0, "Cell A3 green should be B0");
+            assert_eq!(*b, 0xF0, "Cell A3 blue should be F0");
+        }
+        _ => panic!("Cell A3 should have ARGB color"),
+    }
+}
