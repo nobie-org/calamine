@@ -98,7 +98,7 @@ pub use crate::errors::Error;
 pub use crate::formats::{
     builtin_format_by_code, builtin_format_by_id, detect_custom_number_format,
     detect_custom_number_format_with_interner, Alignment, Border, BorderSide, CellFormat,
-    CellStyle, Color, Fill, Font, FormatStringInterner, PatternType,
+    CellStyle, Color, Fill, Font, FormatStringInterner, PatternType, UnderlineStyle,
 };
 pub use crate::ods::{Ods, OdsError};
 pub use crate::theme::{

@@ -123,6 +123,7 @@ impl RowDefinitions {
 }
 
 /// Utility functions for Excel column width conversions
+#[cfg(test)]
 pub mod utils {
     /// Apply Excel default logic to get effective column width
     /// Returns width in Excel's character units
@@ -159,11 +160,6 @@ pub mod utils {
     pub fn pixels_to_character_units(pixels: u32, mdw: f64) -> f64 {
         // Formula from MS docs: =Truncate(({pixels}-5)/{Maximum Digit Width} * 100+0.5)/100
         ((pixels as f64 - 5.0) / mdw * 100.0 + 0.5).trunc() / 100.0
-    }
-
-    /// Convert Excel 1-based column index to 0-based
-    pub fn to_zero_based(excel_col_index: u32) -> u32 {
-        excel_col_index.saturating_sub(1)
     }
 }
 

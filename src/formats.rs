@@ -214,6 +214,14 @@ pub struct Font {
     ///
     /// If None, the font is not italic.
     pub italic: Option<bool>,
+    /// Underline formatting
+    ///
+    /// If None, the font is not underlined.
+    pub underline: Option<UnderlineStyle>,
+    /// Strikethrough formatting
+    ///
+    /// If None, the font does not have strikethrough.
+    pub strikethrough: Option<bool>,
     /// Font color
     ///
     /// Can be RGB, ARGB, theme color, indexed color, or automatic.
@@ -239,6 +247,19 @@ impl Default for Fill {
             background_color: None,
         }
     }
+}
+
+/// Underline style types (matches Excel specification)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnderlineStyle {
+    /// Single underline
+    Single,
+    /// Double underline
+    Double,
+    /// Single accounting underline (spans full cell width)
+    SingleAccounting,
+    /// Double accounting underline (spans full cell width)
+    DoubleAccounting,
 }
 
 /// Pattern fill types (matches Excel specification)
