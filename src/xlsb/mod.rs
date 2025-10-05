@@ -1370,6 +1370,8 @@ fn parse_font(buf: &[u8]) -> Result<Font, XlsbError> {
         },
         bold: Some(bold_weight >= 700 || (grbit & 0x0001) != 0),
         italic: Some((grbit & 0x0002) != 0),
+        underline: None,
+        strikethrough: None,
         color,
     })
 }

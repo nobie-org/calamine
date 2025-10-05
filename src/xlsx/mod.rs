@@ -693,6 +693,8 @@ impl<RS: Read + Seek> Xlsx<RS> {
             size: None,
             bold: None,
             italic: None,
+            underline: None,
+            strikethrough: None,
             color: None,
         };
 
@@ -714,6 +716,24 @@ impl<RS: Read + Seek> Xlsx<RS> {
                     }
                     b"b" => font.bold = Some(true),
                     b"i" => font.italic = Some(true),
+                    b"u" => {
+                        use crate::formats::UnderlineStyle;
+                        // Read underline type from val attribute (single, double, singleAccounting, doubleAccounting)
+                        if let Some(val) = get_attribute(e.attributes(), QName(b"val"))? {
+                            let underline_str = xml.decoder().decode(val)?;
+                            font.underline = match underline_str.as_ref() {
+                                "single" => Some(UnderlineStyle::Single),
+                                "double" => Some(UnderlineStyle::Double),
+                                "singleAccounting" => Some(UnderlineStyle::SingleAccounting),
+                                "doubleAccounting" => Some(UnderlineStyle::DoubleAccounting),
+                                _ => None, // Unknown underline type
+                            };
+                        } else {
+                            // If no val attribute, default to single underline
+                            font.underline = Some(UnderlineStyle::Single);
+                        }
+                    }
+                    b"strike" => font.strikethrough = Some(true),
                     b"color" => {
                         font.color = Self::parse_color_from_attributes(e.attributes())?;
                     }
@@ -3592,6 +3612,8 @@ mod comprehensive_formatting_tests {
                 size: Some(12.0),
                 bold: Some(true),
                 italic: Some(false),
+                underline: None,
+                strikethrough: None,
                 color: Some(Color::Rgb { r: 255, g: 0, b: 0 }),
             })),
             fill: Some(Arc::new(Fill {

@@ -2,7 +2,7 @@ use calamine::Data::{Bool, DateTime, DateTimeIso, DurationIso, Empty, Error, Flo
 use calamine::{
     open_workbook, open_workbook_auto, CellFormat, Color, ColumnDefinition, ColumnWidths, DataRef,
     DataWithFormatting, Dimensions, ExcelDateTime, ExcelDateTimeType, HeaderRow, Ods, PatternType,
-    Range, Reader, ReaderRef, Sheet, SheetType, SheetVisible, Xls, Xlsb, Xlsx,
+    Range, Reader, ReaderRef, Sheet, SheetType, SheetVisible, UnderlineStyle, Xls, Xlsb, Xlsx,
 };
 use calamine::{CellErrorType::*, Data};
 use rstest::rstest;
@@ -2989,6 +2989,238 @@ fn test_calc_chain() {
 }
 
 #[test]
+fn test_font_underline_and_strikethrough() {
+    let mut excel: Xlsx<_> = wb("font_styles.xlsx");
+    let range = excel.worksheet_range("FontStyles").unwrap();
+
+    // A1: Normal text (no special formatting)
+    let normal = range.get_value((0, 0)).unwrap();
+    // Normal text may not have any formatting applied
+    if let Some(formatting) = normal.get_formatting() {
+        if let Some(font) = &formatting.font {
+            assert_eq!(font.underline, None);
+            assert_eq!(font.strikethrough, None);
+        }
+    }
+
+    // A2: Bold text
+    let bold = range.get_value((1, 0)).unwrap();
+    assert_eq!(
+        bold.get_formatting()
+            .as_ref()
+            .unwrap()
+            .font
+            .as_ref()
+            .unwrap()
+            .bold,
+        Some(true)
+    );
+
+    // A3: Italic text
+    let italic = range.get_value((2, 0)).unwrap();
+    assert_eq!(
+        italic
+            .get_formatting()
+            .as_ref()
+            .unwrap()
+            .font
+            .as_ref()
+            .unwrap()
+            .italic,
+        Some(true)
+    );
+
+    // A4: Underlined text (single)
+    let underlined = range.get_value((3, 0)).unwrap();
+    assert_eq!(
+        underlined
+            .get_formatting()
+            .as_ref()
+            .unwrap()
+            .font
+            .as_ref()
+            .unwrap()
+            .underline,
+        Some(UnderlineStyle::Single)
+    );
+    assert_eq!(
+        underlined
+            .get_formatting()
+            .as_ref()
+            .unwrap()
+            .font
+            .as_ref()
+            .unwrap()
+            .strikethrough,
+        None
+    );
+
+    // A5: Strikethrough text
+    let strikethrough = range.get_value((4, 0)).unwrap();
+    assert_eq!(
+        strikethrough
+            .get_formatting()
+            .as_ref()
+            .unwrap()
+            .font
+            .as_ref()
+            .unwrap()
+            .underline,
+        None
+    );
+    assert_eq!(
+        strikethrough
+            .get_formatting()
+            .as_ref()
+            .unwrap()
+            .font
+            .as_ref()
+            .unwrap()
+            .strikethrough,
+        Some(true)
+    );
+
+    // A6: Bold + Underline
+    let bold_underline = range.get_value((5, 0)).unwrap();
+    assert_eq!(
+        bold_underline
+            .get_formatting()
+            .as_ref()
+            .unwrap()
+            .font
+            .as_ref()
+            .unwrap()
+            .bold,
+        Some(true)
+    );
+    assert_eq!(
+        bold_underline
+            .get_formatting()
+            .as_ref()
+            .unwrap()
+            .font
+            .as_ref()
+            .unwrap()
+            .underline,
+        Some(UnderlineStyle::Single)
+    );
+
+    // A7: Italic + Strikethrough
+    let italic_strike = range.get_value((6, 0)).unwrap();
+    assert_eq!(
+        italic_strike
+            .get_formatting()
+            .as_ref()
+            .unwrap()
+            .font
+            .as_ref()
+            .unwrap()
+            .italic,
+        Some(true)
+    );
+    assert_eq!(
+        italic_strike
+            .get_formatting()
+            .as_ref()
+            .unwrap()
+            .font
+            .as_ref()
+            .unwrap()
+            .strikethrough,
+        Some(true)
+    );
+
+    // A8: All styles combined
+    let all_styles = range.get_value((7, 0)).unwrap();
+    assert_eq!(
+        all_styles
+            .get_formatting()
+            .as_ref()
+            .unwrap()
+            .font
+            .as_ref()
+            .unwrap()
+            .bold,
+        Some(true)
+    );
+    assert_eq!(
+        all_styles
+            .get_formatting()
+            .as_ref()
+            .unwrap()
+            .font
+            .as_ref()
+            .unwrap()
+            .italic,
+        Some(true)
+    );
+    assert_eq!(
+        all_styles
+            .get_formatting()
+            .as_ref()
+            .unwrap()
+            .font
+            .as_ref()
+            .unwrap()
+            .underline,
+        Some(UnderlineStyle::Single)
+    );
+    assert_eq!(
+        all_styles
+            .get_formatting()
+            .as_ref()
+            .unwrap()
+            .font
+            .as_ref()
+            .unwrap()
+            .strikethrough,
+        Some(true)
+    );
+
+    // A9: Double underline
+    let double = range.get_value((8, 0)).unwrap();
+    assert_eq!(
+        double
+            .get_formatting()
+            .as_ref()
+            .unwrap()
+            .font
+            .as_ref()
+            .unwrap()
+            .underline,
+        Some(UnderlineStyle::Double)
+    );
+
+    // A10: Single accounting underline
+    let single_acct = range.get_value((9, 0)).unwrap();
+    assert_eq!(
+        single_acct
+            .get_formatting()
+            .as_ref()
+            .unwrap()
+            .font
+            .as_ref()
+            .unwrap()
+            .underline,
+        Some(UnderlineStyle::SingleAccounting)
+    );
+
+    // A11: Double accounting underline
+    let double_acct = range.get_value((10, 0)).unwrap();
+    assert_eq!(
+        double_acct
+            .get_formatting()
+            .as_ref()
+            .unwrap()
+            .font
+            .as_ref()
+            .unwrap()
+            .underline,
+        Some(UnderlineStyle::DoubleAccounting)
+    );
+}
+
+#[test]
 fn test_numfmt_quoted_dollar_and_euro() {
     let mut excel: Xlsx<_> = wb("quote_number_format.xlsx");
 
@@ -3007,7 +3239,6 @@ fn test_numfmt_quoted_dollar_and_euro() {
     assert_eq!(a1_idx, 1);
 }
 
-
 #[test]
 fn test_colors() {
     let mut excel: Xlsx<_> = wb("colortest.xlsx");
@@ -3016,9 +3247,15 @@ fn test_colors() {
 
     // Check cell A1 (row 0, col 0) is red
     let cell_a1 = styles.get((0, 0)).unwrap();
-    assert!(cell_a1.fill.is_some(), "Cell A1 should have fill information");
+    assert!(
+        cell_a1.fill.is_some(),
+        "Cell A1 should have fill information"
+    );
     let fill_a1 = cell_a1.fill.as_ref().unwrap();
-    assert!(fill_a1.foreground_color.is_some(), "Cell A1 should have foreground color");
+    assert!(
+        fill_a1.foreground_color.is_some(),
+        "Cell A1 should have foreground color"
+    );
     match fill_a1.foreground_color.as_ref().unwrap() {
         Color::Argb { a, r, g, b } => {
             assert_eq!(*a, 0xFF, "Cell A1 alpha should be FF");
@@ -3031,9 +3268,15 @@ fn test_colors() {
 
     // Check cell B2 (row 1, col 1) is green
     let cell_b2 = styles.get((1, 1)).unwrap();
-    assert!(cell_b2.fill.is_some(), "Cell B2 should have fill information");
+    assert!(
+        cell_b2.fill.is_some(),
+        "Cell B2 should have fill information"
+    );
     let fill_b2 = cell_b2.fill.as_ref().unwrap();
-    assert!(fill_b2.foreground_color.is_some(), "Cell B2 should have foreground color");
+    assert!(
+        fill_b2.foreground_color.is_some(),
+        "Cell B2 should have foreground color"
+    );
     match fill_b2.foreground_color.as_ref().unwrap() {
         Color::Argb { a, r, g, b } => {
             assert_eq!(*a, 0xFF, "Cell B2 alpha should be FF");
@@ -3046,9 +3289,15 @@ fn test_colors() {
 
     // Check cell A3 (row 2, col 0) is blue
     let cell_a3 = styles.get((2, 0)).unwrap();
-    assert!(cell_a3.fill.is_some(), "Cell A3 should have fill information");
+    assert!(
+        cell_a3.fill.is_some(),
+        "Cell A3 should have fill information"
+    );
     let fill_a3 = cell_a3.fill.as_ref().unwrap();
-    assert!(fill_a3.foreground_color.is_some(), "Cell A3 should have foreground color");
+    assert!(
+        fill_a3.foreground_color.is_some(),
+        "Cell A3 should have foreground color"
+    );
     match fill_a3.foreground_color.as_ref().unwrap() {
         Color::Argb { a, r, g, b } => {
             assert_eq!(*a, 0xFF, "Cell A3 alpha should be FF");
