@@ -3308,3 +3308,44 @@ fn test_colors() {
         _ => panic!("Cell A3 should have ARGB color"),
     }
 }
+
+
+
+
+#[test]
+fn test_translated_formulas() {
+    use calamine::DataType;
+    
+    // Load translationblock.xlsx
+    let mut excel: Xlsx<_> = wb("translationblock.xlsx");
+    
+    // Get the formula sheet
+    let formula_range = excel.worksheet_formula("Sheet1")
+        .expect("Failed to get formulas from Sheet1");
+    
+    // Get formulas for cells A3 and B3
+    // A3 is at position (2, 0), B3 is at position (2, 1)
+    let formula_a3 = formula_range.get_value((2, 0))
+        .and_then(|f| f.as_string())
+        .unwrap_or_default();
+    
+    let formula_b3 = formula_range.get_value((2, 1))
+        .and_then(|f| f.as_string())
+        .unwrap_or_default();
+    
+    // Expected formulas
+    let expected_a3 = "IF(AND(ISNUMBER(A2),ISNUMBER(A$1)),A2/A$1,\"\")";
+    let expected_b3 = "IF(AND(ISNUMBER(B2),ISNUMBER(B$1)),B2/B$1,\"\")";
+    
+    // Check if formulas match
+    if formula_a3 != expected_a3 || formula_b3 != expected_b3 {
+        println!("Formula mismatch!");
+        println!("A3 formula: {}", formula_a3);
+        println!("Expected:   {}", expected_a3);
+        println!("B3 formula: {}", formula_b3);
+        println!("Expected:   {}", expected_b3);
+    }
+    
+    assert_eq!(formula_a3, expected_a3, "A3 formula mismatch");
+    assert_eq!(formula_b3, expected_b3, "B3 formula mismatch");
+}

@@ -3350,11 +3350,69 @@ where
 
 /// advance the cell name by the offset
 fn offset_cell_name(name: &[char], offset: (i64, i64)) -> Result<Vec<u8>, XlsxError> {
-    let cell = get_row_column(name.iter().map(|c| *c as u8).collect::<Vec<_>>().as_slice())?;
-    coordinate_to_name((
-        (cell.0 as i64 + offset.0) as u32,
-        (cell.1 as i64 + offset.1) as u32,
-    ))
+    if name.is_empty() {
+        return Err(XlsxError::Unexpected("empty cell name"));
+    }
+    
+    let mut col_fixed = false;
+    let mut row_fixed = false;
+    let mut idx = 0;
+    
+    // Check for $ before column
+    if name.get(idx) == Some(&'$') {
+        col_fixed = true;
+        idx += 1;
+    }
+    
+    // Parse column letters
+    let col_start = idx;
+    while idx < name.len() && name[idx].is_ascii_alphabetic() {
+        idx += 1;
+    }
+    
+    if col_start == idx {
+        return Err(XlsxError::Unexpected("no column in cell name"));
+    }
+    
+    // Check for $ before row
+    if idx < name.len() && name[idx] == '$' {
+        row_fixed = true;
+        idx += 1;
+    }
+    
+    // Parse row number
+    let row_start = idx;
+    while idx < name.len() && name[idx].is_ascii_digit() {
+        idx += 1;
+    }
+    
+    if row_start == idx {
+        return Err(XlsxError::Unexpected("no row in cell name"));
+    }
+    
+    // Extract the clean cell name without $ symbols
+    let clean_name: Vec<u8> = name[col_start..row_start - if row_fixed { 1 } else { 0 }]
+        .iter()
+        .chain(name[row_start..idx].iter())
+        .map(|c| *c as u8)
+        .collect();
+    
+    let cell = get_row_column(&clean_name)?;
+    
+    // Apply offsets only if not fixed
+    let new_row = if row_fixed {
+        cell.0
+    } else {
+        (cell.0 as i64 + offset.0) as u32
+    };
+    
+    let new_col = if col_fixed {
+        cell.1
+    } else {
+        (cell.1 as i64 + offset.1) as u32
+    };
+    
+    coordinate_to_name_with_fixed((new_row, new_col), row_fixed, col_fixed)
 }
 
 /// advance all valid cell names in the string by the offset
@@ -3371,9 +3429,12 @@ fn replace_cell_names(s: &str, offset: (i64, i64)) -> Result<String, XlsxError> 
             res.push(c as u8);
             continue;
         }
-        if c.is_ascii_alphabetic() {
-            if is_cell_row {
-                // two cell not possible stick togather in formula
+        if c == '$' {
+            // Allow $ before column or row
+            cell.push(c);
+        } else if c.is_ascii_alphabetic() {
+            if is_cell_row && !cell.is_empty() && cell.last() != Some(&'$') {
+                // two cell not possible stick togather in formula (unless last char is $)
                 res.extend(cell.iter().map(|c| *c as u8));
                 cell.clear();
                 is_cell_row = false;
@@ -3431,6 +3492,28 @@ pub(crate) fn coordinate_to_name(cell: (u32, u32)) -> Result<Vec<u8>, XlsxError>
         (cell.0 + 1).to_string().into_bytes(),
     ];
     Ok(cell.concat())
+}
+
+/// Convert a cell coordinate to Excelsheet cell name with optional fixed row/column indicators.
+/// If the column number not in 1~16384, an Error is returned.
+pub(crate) fn coordinate_to_name_with_fixed(
+    cell: (u32, u32),
+    row_fixed: bool,
+    col_fixed: bool,
+) -> Result<Vec<u8>, XlsxError> {
+    let mut result = Vec::new();
+    
+    if col_fixed {
+        result.push(b'$');
+    }
+    result.extend(column_number_to_name(cell.1)?);
+    
+    if row_fixed {
+        result.push(b'$');
+    }
+    result.extend((cell.0 + 1).to_string().into_bytes());
+    
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -3517,6 +3600,16 @@ mod tests {
     }
 
     #[test]
+    fn test_coordinate_to_name_with_fixed() {
+        assert_eq!(coordinate_to_name_with_fixed((0, 0), false, false).unwrap(), b"A1");
+        assert_eq!(coordinate_to_name_with_fixed((0, 0), true, false).unwrap(), b"A$1");
+        assert_eq!(coordinate_to_name_with_fixed((0, 0), false, true).unwrap(), b"$A1");
+        assert_eq!(coordinate_to_name_with_fixed((0, 0), true, true).unwrap(), b"$A$1");
+        assert_eq!(coordinate_to_name_with_fixed((105, 2), false, true).unwrap(), b"$C106");
+        assert_eq!(coordinate_to_name_with_fixed((105, 2), true, false).unwrap(), b"C$106");
+    }
+
+    #[test]
     fn test_replace_cell_names() {
         assert_eq!(replace_cell_names("A1", (1, 0)).unwrap(), "A2".to_owned());
         assert_eq!(
@@ -3530,6 +3623,26 @@ mod tests {
             )
             .unwrap(),
             "A2 is a cell, B2 is another, also C108, but XFE123 is not and \"A3\" in quote wont change.".to_owned()
+        );
+    }
+
+    #[test]
+    fn test_replace_cell_names_absolute() {
+        // Test absolute column reference
+        assert_eq!(replace_cell_names("$A1", (1, 1)).unwrap(), "$A2".to_owned());
+        // Test absolute row reference
+        assert_eq!(replace_cell_names("A$1", (1, 1)).unwrap(), "B$1".to_owned());
+        // Test fully absolute reference
+        assert_eq!(replace_cell_names("$A$1", (1, 1)).unwrap(), "$A$1".to_owned());
+        // Test mixed references in formula
+        assert_eq!(
+            replace_cell_names("SUM($A1:B$2)", (1, 1)).unwrap(),
+            "SUM($A2:C$2)".to_owned()
+        );
+        // Test multiple absolute references
+        assert_eq!(
+            replace_cell_names("=$A$1+B2+$C3+D$4", (1, 1)).unwrap(),
+            "=$A$1+C3+$C4+E$4".to_owned()
         );
     }
 
